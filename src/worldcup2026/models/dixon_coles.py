@@ -146,13 +146,14 @@ def _negative_log_likelihood(
     ag: np.ndarray,
     weights: np.ndarray,
     n_teams: int,
+    ha_mask: np.ndarray,
 ) -> float:
     attack = params_flat[:n_teams]
     defence = params_flat[n_teams : 2 * n_teams]
     home_advantage = params_flat[2 * n_teams]
     rho = params_flat[2 * n_teams + 1]
 
-    log_lambda = attack[home_idx] - defence[away_idx] + home_advantage
+    log_lambda = attack[home_idx] - defence[away_idx] + home_advantage * ha_mask
     log_mu = attack[away_idx] - defence[home_idx]
     lam = np.exp(log_lambda)
     mu = np.exp(log_mu)
@@ -185,7 +186,10 @@ def fit(
 ) -> DixonColesParams:
     """Fit Dixon-Coles params by maximum likelihood.
 
-    `matches` is a list of dicts with keys: home, away, home_goals, away_goals.
+    `matches` is a list of dicts with keys: home, away, home_goals, away_goals,
+    and optionally ``neutral`` (bool). Home advantage is applied only to
+    non-neutral matches, so the estimated `home_advantage` isn't diluted by
+    games at neutral venues (tournaments, qualifiers on neutral ground).
     `weights` lets the caller supply per-match weights (e.g. time-decay — see
     `time_decay_weights`). `init` seeds the optimiser; absent it, we start
     from a neutral guess.
@@ -202,6 +206,9 @@ def fit(
     away_idx = np.array([team_idx[m["away"]] for m in matches], dtype=int)
     hg = np.array([m["home_goals"] for m in matches], dtype=float)
     ag = np.array([m["away_goals"] for m in matches], dtype=float)
+    ha_mask = np.array(
+        [0.0 if m.get("neutral", False) else 1.0 for m in matches], dtype=float
+    )
 
     if weights is None:
         weights = np.ones(len(matches))
@@ -231,7 +238,7 @@ def fit(
     result = minimize(
         _negative_log_likelihood,
         x0,
-        args=(home_idx, away_idx, hg, ag, weights, n_teams),
+        args=(home_idx, away_idx, hg, ag, weights, n_teams, ha_mask),
         method="L-BFGS-B",
         bounds=bounds,
     )

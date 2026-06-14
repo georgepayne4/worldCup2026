@@ -308,6 +308,75 @@ def test_sample_score_deterministic_with_seed():
     assert sample_score_from_matrix(m, rng1) == sample_score_from_matrix(m, rng2)
 
 
+def test_simulate_group_uses_known_results_and_skips_sampling():
+    teams = ["A", "B", "C", "D"]
+    fixtures = [
+        ("A", "B"), ("C", "D"),
+        ("A", "C"), ("B", "D"),
+        ("A", "D"), ("B", "C"),
+    ]
+    # Every fixture is already played -> the sampler must never be called and the
+    # standings are fully determined by the observed scores.
+    known = {
+        ("A", "B"): (3, 0), ("C", "D"): (0, 0),
+        ("A", "C"): (2, 0), ("B", "D"): (1, 1),
+        ("A", "D"): (1, 0), ("B", "C"): (0, 0),
+    }
+
+    def sampler(_h, _a, _r):
+        raise AssertionError("sampler called for an already-played fixture")
+
+    standings = simulate_group(
+        teams, fixtures, sampler, np.random.default_rng(0), known_results=known
+    )
+    by_team = {s.team: s for s in standings}
+    assert standings[0].team == "A"
+    assert by_team["A"].points == 9 and by_team["A"].goals_for == 6
+    assert by_team["A"].goals_against == 0
+
+
+def test_known_results_partial_mix_played_and_sampled():
+    teams = ["A", "B", "C", "D"]
+    fixtures = [("A", "B"), ("C", "D"), ("A", "C"), ("B", "D"), ("A", "D"), ("B", "C")]
+    known = {("A", "B"): (5, 0)}  # only this one is played
+
+    def sampler(_h, _a, _r):
+        return 0, 0  # everything else is a goalless draw
+
+    standings = simulate_group(
+        teams, fixtures, sampler, np.random.default_rng(0), known_results=known
+    )
+    by_team = {s.team: s for s in standings}
+    # A won its only decisive game 5-0; everyone else drew everything.
+    assert by_team["A"].goals_for == 5 and by_team["A"].won == 1
+    assert by_team["B"].goals_against == 5
+
+
+def test_monte_carlo_world_cup_respects_known_results():
+    groups = _make_groups_48()
+    # Force T00 to have thrashed its three group rivals already; with a coin-flip
+    # sampler elsewhere it should still reach the knockout in every run.
+    g_a = groups["A"]
+    known = {
+        (g_a[0], g_a[1]): (5, 0),
+        (g_a[0], g_a[2]): (5, 0),
+        (g_a[0], g_a[3]): (5, 0),
+    }
+
+    def sampler(_h, _a, r):
+        return int(r.integers(0, 2)), int(r.integers(0, 2))
+
+    probs = monte_carlo_world_cup(
+        groups, sampler, n_runs=50, seed=4,
+        fixtures_fn=lambda ts: [
+            (ts[0], ts[1]), (ts[0], ts[2]), (ts[0], ts[3]),
+            (ts[1], ts[2]), (ts[1], ts[3]), (ts[2], ts[3]),
+        ],
+        known_results=known,
+    )
+    assert probs[g_a[0]]["group_stage"] == 0.0  # never eliminated in the group
+
+
 def test_simulate_group_ranks_dominant_team_first():
     teams = ["A", "B", "C", "D"]
     fixtures = [

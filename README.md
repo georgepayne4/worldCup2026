@@ -69,6 +69,33 @@ The demo generates a synthetic match history, fits Dixon-Coles, and runs 500
 Monte Carlo World Cups — printing top-10 champion / final / SF / QF
 probabilities. It's the cleanest illustration of how the modules compose.
 
+## Real data: re-simulate from the current state
+
+The pipeline also runs on real data. The
+[`martj42/international_results`](https://github.com/martj42/international_results)
+dataset is a single CSV of every men's international since 1872 — and it now
+carries the WC2026 fixture list too, with unplayed matches scored `NA`. So one
+download gives us both the training history and the live tournament state.
+
+```bash
+# 1. Download the dataset (gitignored — lands in data/raw/)
+curl -sSL -o data/raw/international_results.csv \
+  https://raw.githubusercontent.com/martj42/international_results/master/results.csv
+
+# 2. Fit on history, condition on results played so far, and re-simulate the rest
+python scripts/resim_current_state.py            # 10k sims, history since 2015
+python scripts/resim_current_state.py --n-runs 20000 --since 2018-01-01
+```
+
+The script fits Dixon-Coles with time-decay weighting and neutral-venue
+handling, derives the 12 groups from the fixtures, fixes the already-played
+group results via the simulator's `known_results` hook, and prints updated
+champion / round-reached / group-advancement probabilities. The full 48-team
+table is written to `data/processed/wc2026_resim_<date>.csv`.
+
+Conditioning a simulation on matches already played is a first-class feature of
+the engine — see `known_results` in `simulation/tournament.py`.
+
 ## Contributing / development notes
 
 - `src/worldcup2026/` is the package; everything is importable as

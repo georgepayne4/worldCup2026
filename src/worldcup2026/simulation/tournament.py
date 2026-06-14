@@ -40,6 +40,11 @@ class GroupStanding:
 
 ScoreSampler = Callable[[str, str, np.random.Generator], tuple[int, int]]
 
+# Already-played fixtures, keyed by (home, away) exactly as they appear in the
+# fixture list, mapping to the observed (home_goals, away_goals). Used to
+# condition a simulation on results so far ("re-sim from current state").
+KnownResults = dict[tuple[str, str], tuple[int, int]]
+
 
 def sample_score_from_matrix(matrix: np.ndarray, rng: np.random.Generator) -> tuple[int, int]:
     """Sample (home_goals, away_goals) from a joint score-matrix distribution."""
@@ -54,15 +59,24 @@ def simulate_group(
     fixtures: list[tuple[str, str]],
     sampler: ScoreSampler,
     rng: np.random.Generator,
+    known_results: KnownResults | None = None,
 ) -> list[GroupStanding]:
     """Simulate one group stage.
+
+    Fixtures present in `known_results` (keyed by the same ``(home, away)``
+    tuple) use the observed score instead of being sampled — this is how a
+    re-simulation is conditioned on matches already played. The rest are
+    sampled as usual.
 
     Tiebreakers in v0: points → goal difference → goals for. Head-to-head and the
     rest of the FIFA cascade are deferred to v1.
     """
     standings = {t: GroupStanding(team=t) for t in teams}
     for home, away in fixtures:
-        hg, ag = sampler(home, away, rng)
+        if known_results is not None and (home, away) in known_results:
+            hg, ag = known_results[(home, away)]
+        else:
+            hg, ag = sampler(home, away, rng)
         h = standings[home]
         a = standings[away]
         h.played += 1
@@ -179,11 +193,13 @@ def simulate_world_cup(
     rng: np.random.Generator,
     fixtures_fn: Callable[[list[str]], list[tuple[str, str]]] = default_group_fixtures,
     et_sampler: ScoreSampler | None = None,
+    known_results: KnownResults | None = None,
 ) -> dict[str, str]:
     """Run one full 48-team simulation; return team -> furthest round reached.
 
     Format: 12 groups of 4, top 2 plus the 8 best third-placed teams advance to a
-    32-team knockout.
+    32-team knockout. `known_results` fixes already-played group fixtures (see
+    `simulate_group`) so the run reflects the tournament's current state.
 
     v0 simplifications: knockout pairings use a generic 1-vs-32 seeded bracket
     from overall group-stage performance rather than FIFA's published pairing
@@ -194,7 +210,7 @@ def simulate_world_cup(
 
     reached: dict[str, str] = {t: "group_stage" for ts in groups.values() for t in ts}
     group_standings: dict[str, list[GroupStanding]] = {
-        name: simulate_group(teams, fixtures_fn(teams), sampler, rng)
+        name: simulate_group(teams, fixtures_fn(teams), sampler, rng, known_results)
         for name, teams in groups.items()
     }
 
@@ -256,15 +272,21 @@ def monte_carlo_world_cup(
     seed: int = 42,
     fixtures_fn: Callable[[list[str]], list[tuple[str, str]]] = default_group_fixtures,
     et_sampler: ScoreSampler | None = None,
+    known_results: KnownResults | None = None,
 ) -> dict[str, dict[str, float]]:
-    """Run N simulations; return P(furthest round = X) per team."""
+    """Run N simulations; return P(furthest round = X) per team.
+
+    `known_results` conditions every run on the same already-played fixtures —
+    the basis for "re-sim from current state".
+    """
     rng = np.random.default_rng(seed)
     all_teams = [t for ts in groups.values() for t in ts]
     labels = ("group_stage", *ROUND_LABELS)
     counts: dict[str, dict[str, int]] = {t: dict.fromkeys(labels, 0) for t in all_teams}
     for _ in range(n_runs):
         for t, r in simulate_world_cup(
-            groups, sampler, rng, fixtures_fn, et_sampler=et_sampler
+            groups, sampler, rng, fixtures_fn, et_sampler=et_sampler,
+            known_results=known_results,
         ).items():
             counts[t][r] += 1
     return {
