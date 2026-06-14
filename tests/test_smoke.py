@@ -28,6 +28,7 @@ from worldcup2026.simulation.tournament import (
     monte_carlo_world_cup,
     sample_score_from_matrix,
     simulate_group,
+    simulate_knockout_match,
     simulate_world_cup,
 )
 
@@ -327,6 +328,44 @@ def test_monte_carlo_world_cup_probabilities_sum_to_one_per_team():
     probs = monte_carlo_world_cup(groups, sampler, n_runs=15, seed=2)
     for team_probs in probs.values():
         assert abs(sum(team_probs.values()) - 1.0) < 1e-9
+
+
+def test_et_sampler_used_only_on_drawn_90():
+    et_count = {"n": 0}
+
+    def main_draw(_h, _a, _r):
+        return 1, 1
+
+    def main_win(_h, _a, _r):
+        return 2, 0
+
+    def et(_h, _a, _r):
+        et_count["n"] += 1
+        return 3, 0
+
+    rng = np.random.default_rng(0)
+    winner, _ = simulate_knockout_match("A", "B", main_draw, rng, et_sampler=et)
+    assert et_count["n"] == 1 and winner == "A"
+
+    et_count["n"] = 0
+    winner, _ = simulate_knockout_match("A", "B", main_win, rng, et_sampler=et)
+    assert et_count["n"] == 0 and winner == "A"
+
+
+def test_et_drawn_falls_through_to_coin_flip():
+    et_count = {"n": 0}
+
+    def main_draw(_h, _a, _r):
+        return 0, 0
+
+    def et_draw(_h, _a, _r):
+        et_count["n"] += 1
+        return 1, 1
+
+    rng = np.random.default_rng(0)
+    winner, loser = simulate_knockout_match("A", "B", main_draw, rng, et_sampler=et_draw)
+    assert et_count["n"] == 1
+    assert {winner, loser} == {"A", "B"}
 
 
 def test_monte_carlo_world_cup_dominant_team_wins_every_run():

@@ -141,14 +141,27 @@ def simulate_knockout_match(
     away: str,
     sampler: ScoreSampler,
     rng: np.random.Generator,
+    et_sampler: ScoreSampler | None = None,
 ) -> tuple[str, str]:
-    """Return (winner, loser). v0: coin flip on a drawn 90 minutes as a proxy for
-    extra time + penalties. v1 will model both with scaled-down Poisson rates."""
+    """Return (winner, loser).
+
+    If `et_sampler` is supplied it is called once on a drawn 90 minutes —
+    typically the same Dixon-Coles rates scaled by ~1/3 for 30 extra-time
+    minutes. If still drawn after ET (or no ET sampler is provided) the tie
+    is broken by an unbiased coin flip — v0 proxy for penalties; v1 will
+    weight by strength.
+    """
     hg, ag = sampler(home, away, rng)
     if hg > ag:
         return home, away
     if ag > hg:
         return away, home
+    if et_sampler is not None:
+        et_hg, et_ag = et_sampler(home, away, rng)
+        if et_hg > et_ag:
+            return home, away
+        if et_ag > et_hg:
+            return away, home
     return (home, away) if rng.random() < 0.5 else (away, home)
 
 
@@ -165,6 +178,7 @@ def simulate_world_cup(
     sampler: ScoreSampler,
     rng: np.random.Generator,
     fixtures_fn: Callable[[list[str]], list[tuple[str, str]]] = default_group_fixtures,
+    et_sampler: ScoreSampler | None = None,
 ) -> dict[str, str]:
     """Run one full 48-team simulation; return team -> furthest round reached.
 
@@ -205,7 +219,9 @@ def simulate_world_cup(
     for round_name in ROUND_LABELS[1:]:
         winners = []
         for i in range(0, len(current), 2):
-            winner, _ = simulate_knockout_match(current[i], current[i + 1], sampler, rng)
+            winner, _ = simulate_knockout_match(
+                current[i], current[i + 1], sampler, rng, et_sampler=et_sampler
+            )
             winners.append(winner)
         for w in winners:
             reached[w] = round_name
@@ -220,6 +236,7 @@ def monte_carlo_world_cup(
     n_runs: int = 20_000,
     seed: int = 42,
     fixtures_fn: Callable[[list[str]], list[tuple[str, str]]] = default_group_fixtures,
+    et_sampler: ScoreSampler | None = None,
 ) -> dict[str, dict[str, float]]:
     """Run N simulations; return P(furthest round = X) per team."""
     rng = np.random.default_rng(seed)
@@ -227,7 +244,9 @@ def monte_carlo_world_cup(
     labels = ("group_stage", *ROUND_LABELS)
     counts: dict[str, dict[str, int]] = {t: dict.fromkeys(labels, 0) for t in all_teams}
     for _ in range(n_runs):
-        for t, r in simulate_world_cup(groups, sampler, rng, fixtures_fn).items():
+        for t, r in simulate_world_cup(
+            groups, sampler, rng, fixtures_fn, et_sampler=et_sampler
+        ).items():
             counts[t][r] += 1
     return {
         t: {r: c / n_runs for r, c in round_counts.items()}
