@@ -1,0 +1,22 @@
+# Default runtime configuration for worldcup2026.
+# Secrets must NOT live here — see .env / .env.example.
+
+random_seed: 42
+
+simulation:
+  n_runs: 20000
+
+elo:
+  base_k: 30.0
+  home_advantage: 65.0          # zeroed for World Cup matches at runtime
+  initial_rating: 1500.0
+  k_weights:                    # K multiplier by match importance
+    friendly: 1.0
+    qualifier: 1.5
+    confederation: 2.0
+    world_cup: 2.5
+
+dixon_coles:
+  time_decay_half_life_days: 540    # ~18 months
+  rho_init: -0.1
+  max_goals: 10

@@ -1,0 +1,97 @@
+# --- Secrets & local config ---
+.env
+.env.*
+!.env.example
+*.secret
+*.key
+*.pem
+credentials.json
+secrets/
+
+# --- Data (raw + processed) ---
+data/raw/*
+data/processed/*
+data/external/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/external/.gitkeep
+
+# --- Models / artefacts ---
+models/*
+!models/.gitkeep
+*.pkl
+*.joblib
+*.h5
+*.onnx
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.env-venv/
+
+# --- Testing & coverage ---
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+
+# --- Type checkers / linters ---
+.mypy_cache/
+.dmypy.json
+.pyre/
+.pytype/
+.ruff_cache/
+
+# --- Notebooks ---
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# --- IDEs / editors ---
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# --- Logs ---
+*.log
+logs/
+
+# --- Misc ---
+.cache/
+tmp/
+scratch/
