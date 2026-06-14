@@ -3,6 +3,13 @@
 import numpy as np
 
 import worldcup2026
+from worldcup2026.betting.odds import (
+    expected_value,
+    kelly_fraction,
+    odds_to_probability,
+    probability_to_odds,
+    remove_vig,
+)
 from worldcup2026.evaluation.metrics import (
     brier_score,
     log_loss,
@@ -259,6 +266,30 @@ def test_log_loss_uniform_equals_log_k():
 def test_brier_perfect_is_zero():
     probs = np.array([[1.0, 0.0, 0.0]])
     assert brier_score(probs, np.array([0])) == 0.0
+
+
+# --- Betting primitives ---
+
+def test_odds_probability_roundtrip():
+    assert abs(probability_to_odds(0.5) - 2.0) < 1e-12
+    assert abs(odds_to_probability(2.0) - 0.5) < 1e-12
+
+
+def test_remove_vig_normalises_and_preserves_ordering():
+    fair = remove_vig([1.9, 3.5, 4.5])
+    assert abs(sum(fair) - 1.0) < 1e-9
+    assert fair[0] > fair[1] > fair[2]
+
+
+def test_expected_value_zero_at_fair_odds():
+    assert abs(expected_value(0.5, 2.0)) < 1e-12
+    assert expected_value(0.6, 2.0) > 0.0
+    assert expected_value(0.4, 2.0) < 0.0
+
+
+def test_kelly_zero_when_negative_ev():
+    assert kelly_fraction(0.4, 2.0) == 0.0
+    assert 0.0 < kelly_fraction(0.6, 2.0) <= 1.0
 
 
 def test_rps_penalises_ordinal_distance():
