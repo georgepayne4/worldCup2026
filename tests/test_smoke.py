@@ -25,6 +25,7 @@ from worldcup2026.ratings.elo import (
     goal_difference_multiplier,
 )
 from worldcup2026.simulation.tournament import (
+    cumulative_round_probabilities,
     monte_carlo_group,
     monte_carlo_world_cup,
     sample_score_from_matrix,
@@ -332,6 +333,23 @@ def test_dominant_team_always_wins_the_tournament():
 
     reached = simulate_world_cup(groups, sampler, np.random.default_rng(7))
     assert reached["T00"] == "champion"
+
+
+def test_cumulative_round_probabilities_monotone_and_bounded():
+    fake = {
+        "X": {
+            "group_stage": 0.40, "round_of_32": 0.30, "round_of_16": 0.15,
+            "quarter_final": 0.08, "semi_final": 0.04, "final": 0.02, "champion": 0.01,
+        }
+    }
+    cum = cumulative_round_probabilities(fake)
+    assert abs(cum["X"]["group_stage"] - 1.0) < 1e-9
+    assert abs(cum["X"]["champion"] - 0.01) < 1e-9
+    assert abs(cum["X"]["final"] - 0.03) < 1e-9
+    order = ["group_stage", "round_of_32", "round_of_16", "quarter_final",
+             "semi_final", "final", "champion"]
+    vals = [cum["X"][r] for r in order]
+    assert all(vals[i] >= vals[i + 1] for i in range(len(vals) - 1))
 
 
 def test_monte_carlo_world_cup_probabilities_sum_to_one_per_team():

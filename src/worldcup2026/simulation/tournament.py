@@ -230,6 +230,25 @@ def simulate_world_cup(
     return reached
 
 
+def cumulative_round_probabilities(
+    probs: dict[str, dict[str, float]],
+) -> dict[str, dict[str, float]]:
+    """Transform P(furthest round = X) into P(reached round X or further).
+
+    Same keys, same teams. P(group_stage) is always 1.0; P(champion) equals
+    the original 'champion' value. This is the form bet markets price —
+    "to reach the final" is P(reach final or further) = P(final) + P(champion).
+    """
+    labels = ("group_stage", *ROUND_LABELS)
+    return {
+        team: {
+            label: sum(team_probs[r] for r in labels[i:])
+            for i, label in enumerate(labels)
+        }
+        for team, team_probs in probs.items()
+    }
+
+
 def monte_carlo_world_cup(
     groups: dict[str, list[str]],
     sampler: ScoreSampler,
