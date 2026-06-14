@@ -60,7 +60,14 @@ cp .env.example .env             # then fill in any API keys locally
 
 # 5. Run tests
 pytest
+
+# 6. Run the end-to-end demo (synthetic data, ~10s)
+python scripts/example.py
 ```
+
+The demo generates a synthetic match history, fits Dixon-Coles, and runs 500
+Monte Carlo World Cups — printing top-10 champion / final / SF / QF
+probabilities. It's the cleanest illustration of how the modules compose.
 
 ## Contributing / development notes
 
