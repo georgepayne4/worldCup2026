@@ -118,6 +118,22 @@ It prints a ranked table and the recommended `(window, half-life)`; those
 values feed `config/default.yaml` (`world_cup.fit_window_years` /
 `fit_half_life_days`) and the `resim_current_state.py` defaults.
 
+## Betting layer (MVP in progress)
+
+The project is now building toward a betting MVP — see [ROADMAP.md](ROADMAP.md)
+for the sequenced plan and the edge thesis (*calibrate marginals to the market,
+win on correlation, measure by CLV*). Landed so far:
+
+- `data/odds.py` — bookmaker odds ingestion into one normalized table (The Odds
+  API; key via `.env` `ODDS_API_KEY`; works offline from cached snapshots).
+- `betting/clv.py` — closing-line-value & P&L harness: CLV-EV vs the no-vig
+  close, beat-close rate, settlement, and an aggregate report. CLV is the
+  go/no-go signal for whether the model has real edge.
+
+```bash
+python scripts/clv_demo.py     # CLV/ROI report on a synthetic bet ledger
+```
+
 ## Contributing / development notes
 
 - `src/worldcup2026/` is the package; everything is importable as
