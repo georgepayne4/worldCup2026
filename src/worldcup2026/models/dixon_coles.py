@@ -42,11 +42,19 @@ def match_rates(
     home_team: str,
     away_team: str,
     neutral: bool = False,
+    home_boost: float = 0.0,
+    away_boost: float = 0.0,
 ) -> tuple[float, float]:
-    """Expected goals (lambda for home, mu for away)."""
+    """Expected goals (lambda for home, mu for away).
+
+    `home_boost` / `away_boost` are additive log-rate adjustments applied to the
+    respective side — used for a World Cup **host residual** (a small home-style
+    edge for a host nation even at nominally neutral venues), independent of the
+    fitted generic `home_advantage`.
+    """
     ha = 0.0 if neutral else params.home_advantage
-    log_lambda = params.attack[home_team] - params.defence[away_team] + ha
-    log_mu = params.attack[away_team] - params.defence[home_team]
+    log_lambda = params.attack[home_team] - params.defence[away_team] + ha + home_boost
+    log_mu = params.attack[away_team] - params.defence[home_team] + away_boost
     return float(np.exp(log_lambda)), float(np.exp(log_mu))
 
 

@@ -42,6 +42,10 @@ from worldcup2026.simulation.tournament import (
 # and to date the report.
 TODAY = date(2026, 6, 14)
 
+# 2026 co-hosts (dataset spellings). They get a small home-style residual even
+# though World Cup venues are otherwise treated as neutral.
+HOSTS = frozenset({"Mexico", "United States", "Canada"})
+
 
 def fit_ratings(since: str, half_life_days: float, max_goals: int):
     """Fit Dixon-Coles on historical results up to TODAY with time decay."""
@@ -75,12 +79,17 @@ def fit_ratings(since: str, half_life_days: float, max_goals: int):
     return fitted
 
 
-def build_samplers(fitted, teams, rho, max_goals):
+def build_samplers(fitted, teams, rho, max_goals, hosts, host_advantage):
     """Pre-compute a sampler over every ordered pair of WC teams.
 
-    Each fixture's neutral-venue score matrix is flattened to a cumulative
-    distribution once; sampling is then a single ``random()`` + ``searchsorted``
-    — far cheaper than ``rng.choice`` per call across millions of draws.
+    Matches are simulated at neutral venues, except that a host nation
+    (`hosts`) carries a `host_advantage` log-rate residual whenever it plays —
+    a small home-style edge for crowd/familiarity that the methodology zeroes
+    for everyone else (see METHODOLOGY §3.1, §8).
+
+    Each fixture's score matrix is flattened to a cumulative distribution once;
+    sampling is then a single ``random()`` + ``searchsorted`` — far cheaper than
+    ``rng.choice`` per call across millions of draws.
     """
     n = max_goals + 1
     normal_cdf: dict[tuple[str, str], np.ndarray] = {}
@@ -89,7 +98,12 @@ def build_samplers(fitted, teams, rho, max_goals):
         for away in teams:
             if home == away:
                 continue
-            lam, mu = match_rates(fitted, home, away, neutral=True)
+            home_boost = host_advantage if home in hosts else 0.0
+            away_boost = host_advantage if away in hosts else 0.0
+            lam, mu = match_rates(
+                fitted, home, away, neutral=True,
+                home_boost=home_boost, away_boost=away_boost,
+            )
             m = score_matrix(lam, mu, rho, max_goals)
             normal_cdf[(home, away)] = np.cumsum(m.ravel())
             et = score_matrix(lam / 3.0, mu / 3.0, rho, max_goals)
@@ -112,13 +126,32 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--n-runs", type=int, default=10_000)
     ap.add_argument("--seed", type=int, default=42)
-    ap.add_argument("--since", default="2015-01-01", help="earliest match date to fit on")
-    ap.add_argument("--half-life", type=float, default=540.0, help="decay half-life (days)")
+    ap.add_argument(
+        "--window-years",
+        type=float,
+        default=10.0,
+        help="training window length (tuned via scripts/backtest_window.py)",
+    )
+    ap.add_argument(
+        "--since",
+        default=None,
+        help="explicit earliest fit date; overrides --window-years",
+    )
+    ap.add_argument("--half-life", type=float, default=1095.0, help="decay half-life (days)")
     ap.add_argument("--max-goals", type=int, default=8)
+    ap.add_argument(
+        "--host-advantage",
+        type=float,
+        default=0.15,
+        help="host log-rate residual for Mexico/USA/Canada (0 disables)",
+    )
     ap.add_argument("--top", type=int, default=20, help="rows to print")
     args = ap.parse_args()
 
-    fitted = fit_ratings(args.since, args.half_life, args.max_goals)
+    since = args.since or str(
+        (pd.Timestamp(TODAY) - pd.Timedelta(days=round(args.window_years * 365.25))).date()
+    )
+    fitted = fit_ratings(since, args.half_life, args.max_goals)
 
     fixtures = load_fixtures_2026()
     groups = derive_groups(fixtures)
@@ -147,8 +180,12 @@ def main() -> None:
     }
     print(f"\nGroup stage: {len(played)} of {len(fixtures)} matches played.")
 
+    print(
+        f"Host residual: +{args.host_advantage:.2f} log-rate for "
+        f"{', '.join(sorted(HOSTS))}."
+    )
     sampler, et_sampler = build_samplers(
-        fitted, all_teams, fitted.rho, args.max_goals
+        fitted, all_teams, fitted.rho, args.max_goals, HOSTS, args.host_advantage
     )
 
     print(f"Running {args.n_runs:,} Monte Carlo tournaments from current state...")

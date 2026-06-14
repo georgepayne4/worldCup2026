@@ -100,6 +100,24 @@ constraints — rather than a generic seeded bracket (see `simulation/bracket.py
 Conditioning a simulation on matches already played is a first-class feature of
 the engine — see `known_results` in `simulation/tournament.py`.
 
+**Host residual.** World Cup venues are treated as neutral, except the three
+co-hosts (Mexico, USA, Canada) carry a small `--host-advantage` log-rate edge
+whenever they play (default 0.15; pass `0` to disable).
+
+## Tuning the fit window
+
+The training window and time-decay half-life are tuned by backtesting 1X2
+log-loss / RPS on two holdouts (the WC2022 finals, and recent competitive
+internationals):
+
+```bash
+python scripts/backtest_window.py     # grid over window-years x half-life
+```
+
+It prints a ranked table and the recommended `(window, half-life)`; those
+values feed `config/default.yaml` (`world_cup.fit_window_years` /
+`fit_half_life_days`) and the `resim_current_state.py` defaults.
+
 ## Contributing / development notes
 
 - `src/worldcup2026/` is the package; everything is importable as

@@ -182,6 +182,18 @@ def test_predict_match_returns_consistent_summary():
     assert p.p_home_win > p.p_away_win
 
 
+def test_match_rates_host_boost_lifts_only_that_side():
+    params = DixonColesParams(
+        attack={"A": 0.0, "B": 0.0}, defence={"A": 0.0, "B": 0.0},
+        home_advantage=0.0, rho=0.0,
+    )
+    lam0, mu0 = match_rates(params, "A", "B", neutral=True)
+    lam_h, mu_h = match_rates(params, "A", "B", neutral=True, home_boost=0.2)
+    assert lam_h > lam0 and mu_h == mu0
+    lam_a, mu_a = match_rates(params, "A", "B", neutral=True, away_boost=0.2)
+    assert mu_a > mu0 and lam_a == lam0
+
+
 # --- Dixon-Coles fit (synthetic round-trip) ---
 
 def _generate_matches(true_params, teams, n_repeats, rng):

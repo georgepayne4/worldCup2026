@@ -74,8 +74,11 @@ the joint probability for low-scoring outcomes (0-0, 1-0, 0-1, 1-1) to fix vanil
 Poisson's well-known under-prediction of draws.
 
 Strength parameters $\alpha_i, \beta_i$ are seeded from the Elo layer and then re-fit by
-maximum likelihood with **exponential time-decay weighting** (half-life ~18 months) so
-recent form dominates.
+maximum likelihood with **exponential time-decay weighting**. The half-life and training
+window are tuned by backtest (`scripts/backtest_window.py`, 1X2 log-loss on the WC2022
+finals + recent competitive holdouts); the optimum is flat across roughly an 8–12 year
+window with a ~24–36 month half-life — longer than the initial ~18 month guess, i.e.
+international ratings reward stability over chasing recent form.
 
 ### 3.3 Tournament progression — Monte Carlo
 
@@ -159,8 +162,11 @@ src/worldcup2026/
 
 ## 8. Assumptions & limitations
 
-- **Neutral-venue assumption** — home advantage is zeroed for the WC. The three host
-  nations get a small residual bonus; this may under-state it.
+- **Neutral-venue assumption** — home advantage is zeroed for the WC, except the three
+  co-hosts (Mexico, USA, Canada) carry a small `host_advantage` log-rate residual in
+  every match they play (config `world_cup.host_advantage`, default 0.15). This is a
+  flat per-host edge, not venue-specific, so it slightly mis-states host games played
+  away from their own country.
 - **Injuries / squad changes** are not modelled in v0. We treat team strength as
   team-level. Player-level adjustments come later.
 - **Tactical match-ups** (e.g. high-press vs. low-block) are absorbed into the noise term.

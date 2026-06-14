@@ -20,3 +20,14 @@ dixon_coles:
   time_decay_half_life_days: 540    # ~18 months
   rho_init: -0.1
   max_goals: 10
+
+world_cup:
+  # Training window for the pre-/in-tournament fit (scripts/resim_current_state.py).
+  # Tuned via scripts/backtest_window.py (1X2 log-loss on WC2022 + recent
+  # competitive holdouts). The optimum is flat across ~8-12y / 730-1095d.
+  fit_window_years: 10
+  fit_half_life_days: 1095
+  # Host residual: small log-rate edge for the three 2026 co-hosts at otherwise
+  # neutral venues. 0 disables. ~0.15 ≈ a ~16% scoring lift in their matches.
+  host_advantage: 0.15
+  hosts: ["Mexico", "United States", "Canada"]
