@@ -1,6 +1,9 @@
 """Behavioural tests for v0 implementations."""
 
+from itertools import combinations
+
 import numpy as np
+import pytest
 
 import worldcup2026
 from worldcup2026.betting.odds import (
@@ -30,6 +33,15 @@ from worldcup2026.ratings.elo import (
     EloRatings,
     expected_score,
     goal_difference_multiplier,
+)
+from worldcup2026.simulation.bracket import (
+    GROUP_LETTERS,
+    KNOCKOUT_TREE,
+    R32_LEAF_ORDER,
+    R32_MATCHES,
+    THIRD_SLOT_GROUPS,
+    assign_thirds,
+    bracket_order,
 )
 from worldcup2026.simulation.tournament import (
     cumulative_round_probabilities,
@@ -402,6 +414,68 @@ def test_simulate_group_ranks_dominant_team_first():
 def _make_groups_48():
     teams = [f"T{i:02d}" for i in range(48)]
     return {chr(65 + g): teams[g * 4 : (g + 1) * 4] for g in range(12)}
+
+
+# --- FIFA fixed knockout bracket ---
+
+def test_leaf_order_folds_into_official_tree():
+    # Pairwise-folding R32 winners in leaf order must reproduce KNOCKOUT_TREE.
+    current = list(R32_LEAF_ORDER)
+    expected_round_roots = [
+        [89, 90, 91, 92, 93, 94, 95, 96],
+        [97, 98, 99, 100],
+        [101, 102],
+        [104],
+    ]
+    for roots in expected_round_roots:
+        nxt = []
+        for i in range(0, len(current), 2):
+            a, b = current[i], current[i + 1]
+            # find the match whose two feeders are {a, b}
+            match = next(m for m, fb in KNOCKOUT_TREE.items() if set(fb) == {a, b})
+            nxt.append(match)
+        assert sorted(nxt) == roots
+        current = nxt
+    assert current == [104]
+    assert len(R32_LEAF_ORDER) == 16 and len(set(R32_LEAF_ORDER)) == 16
+
+
+def test_assign_thirds_valid_for_all_495_combinations():
+    for combo in combinations(GROUP_LETTERS, 8):
+        assignment = assign_thirds(list(combo))
+        # one team per third slot, exactly the qualifying groups, each in-range
+        assert set(assignment) == set(THIRD_SLOT_GROUPS)
+        assert sorted(assignment.values()) == sorted(combo)
+        for match, group in assignment.items():
+            assert group in THIRD_SLOT_GROUPS[match]
+            winner_slot = R32_MATCHES[match][0]
+            assert winner_slot[0] == "W" and winner_slot[1] != group  # no self-meet
+
+
+def test_assign_thirds_rejects_wrong_count():
+    with pytest.raises(ValueError):
+        assign_thirds(list("ABCDEFG"))  # only 7
+
+
+def test_bracket_order_never_pairs_same_group_in_r32():
+    winners = {g: f"{g}1" for g in GROUP_LETTERS}
+    runners_up = {g: f"{g}2" for g in GROUP_LETTERS}
+    qualifying = list("ABCDEFGH")  # any 8 groups
+    thirds = {g: f"{g}3" for g in qualifying}
+    order = bracket_order(winners, runners_up, thirds, assign_thirds(qualifying))
+    assert len(order) == 32 and len(set(order)) == 32
+    for i in range(0, 32, 2):
+        assert order[i][0] != order[i + 1][0]  # group letter prefix differs
+
+
+def test_simulate_world_cup_requires_groups_a_to_l():
+    bad_groups = {str(i): [f"x{i}{j}" for j in range(4)] for i in range(12)}
+
+    def sampler(_h, _a, r):
+        return int(r.integers(0, 3)), int(r.integers(0, 3))
+
+    with pytest.raises(ValueError):
+        simulate_world_cup(bad_groups, sampler, np.random.default_rng(0))
 
 
 def test_simulate_world_cup_round_counts_invariant():

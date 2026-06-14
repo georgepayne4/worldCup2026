@@ -11,6 +11,12 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from worldcup2026.simulation.bracket import (
+    GROUP_LETTERS,
+    assign_thirds,
+    bracket_order,
+)
+
 
 @dataclass
 class SimulationConfig:
@@ -136,20 +142,6 @@ def default_group_fixtures(teams: list[str]) -> list[tuple[str, str]]:
     return [(teams[i], teams[j]) for i in range(len(teams)) for j in range(i + 1, len(teams))]
 
 
-def _bracket_seed_order(n: int) -> list[int]:
-    """Standard 1-indexed tournament bracket order (1 vs n, 2 vs n-1, ...) arranged
-    so higher seeds meet later rounds. n must be a power of two."""
-    order = [1]
-    while len(order) < n:
-        size = 2 * len(order)
-        new = []
-        for s in order:
-            new.append(s)
-            new.append(size + 1 - s)
-        order = new
-    return order
-
-
 def simulate_knockout_match(
     home: str,
     away: str,
@@ -179,12 +171,18 @@ def simulate_knockout_match(
     return (home, away) if rng.random() < 0.5 else (away, home)
 
 
-def _best_third_placed(
-    group_results: dict[str, list[GroupStanding]], k: int = 8
-) -> list[GroupStanding]:
-    thirds = [standings[2] for standings in group_results.values()]
-    thirds.sort(key=lambda s: (s.points, s.goal_difference, s.goals_for), reverse=True)
-    return thirds[:k]
+def _qualifying_thirds(group_standings: dict[str, list[GroupStanding]]) -> list[str]:
+    """Group letters of the 8 best third-placed teams, ranked across all groups."""
+    ranked = sorted(
+        group_standings.items(),
+        key=lambda kv: (
+            kv[1][2].points,
+            kv[1][2].goal_difference,
+            kv[1][2].goals_for,
+        ),
+        reverse=True,
+    )
+    return [letter for letter, _ in ranked[:8]]
 
 
 def simulate_world_cup(
@@ -197,16 +195,20 @@ def simulate_world_cup(
 ) -> dict[str, str]:
     """Run one full 48-team simulation; return team -> furthest round reached.
 
-    Format: 12 groups of 4, top 2 plus the 8 best third-placed teams advance to a
-    32-team knockout. `known_results` fixes already-played group fixtures (see
-    `simulate_group`) so the run reflects the tournament's current state.
+    Format: 12 groups of 4 (labelled A-L), top 2 plus the 8 best third-placed
+    teams advance to a 32-team knockout. The knockout uses FIFA's fixed bracket
+    (`simulation.bracket`): group winners/runners-up occupy their published R32
+    slots and the third-placed teams are routed under Annex C's constraints.
+    `known_results` fixes already-played group fixtures (see `simulate_group`)
+    so the run reflects the tournament's current state.
 
-    v0 simplifications: knockout pairings use a generic 1-vs-32 seeded bracket
-    from overall group-stage performance rather than FIFA's published pairing
-    rules; drawn knockout matches resolve via coin flip.
+    v0 simplifications that remain: drawn knockout matches resolve via coin flip
+    (unless an `et_sampler` breaks them first).
     """
-    if len(groups) != 12:
-        raise ValueError(f"expected 12 groups, got {len(groups)}")
+    if set(groups) != set(GROUP_LETTERS):
+        raise ValueError(
+            f"fixed bracket requires the 12 groups labelled A-L; got {sorted(groups)}"
+        )
 
     reached: dict[str, str] = {t: "group_stage" for ts in groups.values() for t in ts}
     group_standings: dict[str, list[GroupStanding]] = {
@@ -214,23 +216,15 @@ def simulate_world_cup(
         for name, teams in groups.items()
     }
 
-    advancing: list[GroupStanding] = []
-    for standings in group_standings.values():
-        advancing.append(standings[0])
-        advancing.append(standings[1])
-    advancing.extend(_best_third_placed(group_standings, k=8))
+    group_winners = {letter: s[0].team for letter, s in group_standings.items()}
+    runners_up = {letter: s[1].team for letter, s in group_standings.items()}
+    qualifying = _qualifying_thirds(group_standings)
+    thirds = {letter: group_standings[letter][2].team for letter in qualifying}
+    third_assignment = assign_thirds(qualifying)
 
-    seeded = sorted(
-        advancing,
-        key=lambda s: (s.points, s.goal_difference, s.goals_for),
-        reverse=True,
-    )
-    teams_in_r32 = [s.team for s in seeded]
-    for t in teams_in_r32:
+    current = bracket_order(group_winners, runners_up, thirds, third_assignment)
+    for t in current:
         reached[t] = "round_of_32"
-
-    order = _bracket_seed_order(len(teams_in_r32))
-    current = [teams_in_r32[s - 1] for s in order]
 
     for round_name in ROUND_LABELS[1:]:
         winners = []

@@ -93,6 +93,10 @@ group results via the simulator's `known_results` hook, and prints updated
 champion / round-reached / group-advancement probabilities. The full 48-team
 table is written to `data/processed/wc2026_resim_<date>.csv`.
 
+The knockout stage uses FIFA's **fixed** bracket — group winners/runners-up in
+their published R32 slots, third-placed teams routed under Annex C's group
+constraints — rather than a generic seeded bracket (see `simulation/bracket.py`).
+
 Conditioning a simulation on matches already played is a first-class feature of
 the engine — see `known_results` in `simulation/tournament.py`.
 

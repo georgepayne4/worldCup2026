@@ -84,7 +84,12 @@ Group stage and knockout bracket are simulated $N \geq 20{,}000$ times. Each sim
 1. Sample every group-stage match score from the bivariate Poisson.
 2. Apply FIFA tiebreakers (points → GD → GF → head-to-head → fair play → draw of lots).
 3. Resolve the 48-team expanded knockout bracket (32-team round of 32 → R16 → QF → SF →
-   F), sampling extra time and penalties when needed.
+   F) using FIFA's **fixed** published bracket: each group winner / runner-up occupies
+   its pre-assigned R32 slot and winners feed a fixed tree (matches 73–104). The eight
+   best third-placed teams are routed into their R32 slots under Annex C's constraints —
+   each slot only accepts thirds from a published set of groups, and no team meets its
+   own group (see `simulation/bracket.py`). Extra time and penalties are sampled when
+   needed.
 4. Record bracket outcomes per team.
 
 Outputs are reported as Monte Carlo probability estimates with binomial confidence
