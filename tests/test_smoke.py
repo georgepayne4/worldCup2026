@@ -11,10 +11,12 @@ from worldcup2026.evaluation.metrics import (
 from worldcup2026.models.dixon_coles import (
     DixonColesParams,
     btts_probability,
+    fit,
     match_probabilities,
     match_rates,
     over_under_probability,
     score_matrix,
+    time_decay_weights,
 )
 from worldcup2026.ratings.elo import (
     EloRatings,
@@ -140,6 +142,87 @@ def test_over_under_partition_on_non_integer_line():
 def test_btts_bounded():
     m = score_matrix(1.5, 1.2, rho=-0.1)
     assert 0.0 < btts_probability(m) < 1.0
+
+
+# --- Dixon-Coles fit (synthetic round-trip) ---
+
+def _generate_matches(true_params, teams, n_repeats, rng):
+    matches = []
+    for _ in range(n_repeats):
+        for home in teams:
+            for away in teams:
+                if home == away:
+                    continue
+                lam, mu = match_rates(true_params, home, away)
+                matrix = score_matrix(lam, mu, true_params.rho, max_goals=8)
+                from worldcup2026.simulation.tournament import sample_score_from_matrix
+                hg, ag = sample_score_from_matrix(matrix, rng)
+                matches.append(
+                    {"home": home, "away": away, "home_goals": hg, "away_goals": ag}
+                )
+    return matches
+
+
+def test_fit_recovers_team_strength_ordering():
+    teams = ["strong", "good", "mid", "weak", "minnow"]
+    true_params = DixonColesParams(
+        attack={"strong": 0.6, "good": 0.3, "mid": 0.0, "weak": -0.3, "minnow": -0.6},
+        defence={"strong": -0.4, "good": -0.2, "mid": 0.0, "weak": 0.2, "minnow": 0.5},
+        home_advantage=0.25,
+        rho=-0.08,
+    )
+    rng = np.random.default_rng(42)
+    matches = _generate_matches(true_params, teams, n_repeats=25, rng=rng)
+
+    fitted = fit(matches, teams=teams)
+
+    assert fitted.attack["strong"] > fitted.attack["mid"] > fitted.attack["minnow"]
+    assert fitted.defence["strong"] < fitted.defence["mid"] < fitted.defence["minnow"]
+    assert fitted.home_advantage > 0.0
+
+
+def test_fit_centres_attack_to_zero_mean():
+    teams = ["A", "B", "C"]
+    true_params = DixonColesParams(
+        attack={"A": 0.4, "B": 0.0, "C": -0.4},
+        defence={"A": -0.2, "B": 0.0, "C": 0.2},
+        home_advantage=0.2,
+        rho=-0.05,
+    )
+    rng = np.random.default_rng(0)
+    matches = _generate_matches(true_params, teams, n_repeats=30, rng=rng)
+
+    fitted = fit(matches, teams=teams)
+    mean_attack = sum(fitted.attack.values()) / len(teams)
+    assert abs(mean_attack) < 1e-9
+
+
+def test_time_decay_weights_recent_heavier_than_old():
+    dates = ["2023-01-01", "2024-01-01", "2025-01-01"]
+    w = time_decay_weights(dates, "2026-01-01", half_life_days=365.0)
+    assert w[0] < w[1] < w[2]
+    # halving every half-life — 1y old should be ~2x heavier than 2y old
+    assert abs(w[2] / w[1] - 2.0) < 0.05
+
+
+def test_fit_respects_time_decay():
+    teams = ["A", "B"]
+    true_old = DixonColesParams(
+        attack={"A": 0.7, "B": -0.7}, defence={"A": -0.3, "B": 0.3},
+        home_advantage=0.0, rho=0.0,
+    )
+    true_new = DixonColesParams(
+        attack={"A": -0.7, "B": 0.7}, defence={"A": 0.3, "B": -0.3},
+        home_advantage=0.0, rho=0.0,
+    )
+    rng = np.random.default_rng(1)
+    old_matches = _generate_matches(true_old, teams, n_repeats=60, rng=rng)
+    new_matches = _generate_matches(true_new, teams, n_repeats=60, rng=rng)
+    matches = old_matches + new_matches
+    weights = np.concatenate([np.full(len(old_matches), 0.01), np.full(len(new_matches), 1.0)])
+
+    fitted = fit(matches, teams=teams, weights=weights)
+    assert fitted.attack["B"] > fitted.attack["A"]
 
 
 # --- Metrics ---

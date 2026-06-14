@@ -11,6 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
+from scipy.optimize import minimize
+from scipy.special import gammaln
 from scipy.stats import poisson
 
 
@@ -95,6 +97,130 @@ def expected_goals(matrix: np.ndarray) -> tuple[float, float]:
     return home_eg, away_eg
 
 
-def fit(*args, **kwargs):
-    """Fit DC params by MLE with time-decay weighting. Lands in next session."""
-    raise NotImplementedError
+def _negative_log_likelihood(
+    params_flat: np.ndarray,
+    home_idx: np.ndarray,
+    away_idx: np.ndarray,
+    hg: np.ndarray,
+    ag: np.ndarray,
+    weights: np.ndarray,
+    n_teams: int,
+) -> float:
+    attack = params_flat[:n_teams]
+    defence = params_flat[n_teams : 2 * n_teams]
+    home_advantage = params_flat[2 * n_teams]
+    rho = params_flat[2 * n_teams + 1]
+
+    log_lambda = attack[home_idx] - defence[away_idx] + home_advantage
+    log_mu = attack[away_idx] - defence[home_idx]
+    lam = np.exp(log_lambda)
+    mu = np.exp(log_mu)
+
+    log_p = (
+        hg * log_lambda - lam - gammaln(hg + 1)
+        + ag * log_mu - mu - gammaln(ag + 1)
+    )
+
+    tau_arr = np.ones_like(log_p)
+    m00 = (hg == 0) & (ag == 0)
+    m01 = (hg == 0) & (ag == 1)
+    m10 = (hg == 1) & (ag == 0)
+    m11 = (hg == 1) & (ag == 1)
+    tau_arr[m00] = 1.0 - lam[m00] * mu[m00] * rho
+    tau_arr[m01] = 1.0 + lam[m01] * rho
+    tau_arr[m10] = 1.0 + mu[m10] * rho
+    tau_arr[m11] = 1.0 - rho
+    tau_arr = np.maximum(tau_arr, 1e-15)
+    log_p = log_p + np.log(tau_arr)
+
+    return float(-(weights * log_p).sum())
+
+
+def fit(
+    matches: list[dict],
+    teams: list[str] | None = None,
+    weights: np.ndarray | None = None,
+    init: DixonColesParams | None = None,
+) -> DixonColesParams:
+    """Fit Dixon-Coles params by maximum likelihood.
+
+    `matches` is a list of dicts with keys: home, away, home_goals, away_goals.
+    `weights` lets the caller supply per-match weights (e.g. time-decay — see
+    `time_decay_weights`). `init` seeds the optimiser; absent it, we start
+    from a neutral guess.
+
+    Identifiability: the model is invariant to a common shift of attack and
+    defence vectors. After fitting we re-centre so mean(attack) == 0.
+    """
+    if teams is None:
+        teams = sorted({m["home"] for m in matches} | {m["away"] for m in matches})
+    team_idx = {t: i for i, t in enumerate(teams)}
+    n_teams = len(teams)
+
+    home_idx = np.array([team_idx[m["home"]] for m in matches], dtype=int)
+    away_idx = np.array([team_idx[m["away"]] for m in matches], dtype=int)
+    hg = np.array([m["home_goals"] for m in matches], dtype=float)
+    ag = np.array([m["away_goals"] for m in matches], dtype=float)
+
+    if weights is None:
+        weights = np.ones(len(matches))
+    weights = np.asarray(weights, dtype=float)
+
+    if init is None:
+        x0 = np.concatenate(
+            [np.zeros(n_teams), np.zeros(n_teams), np.array([0.25]), np.array([-0.1])]
+        )
+    else:
+        x0 = np.concatenate(
+            [
+                np.array([init.attack[t] for t in teams]),
+                np.array([init.defence[t] for t in teams]),
+                np.array([init.home_advantage]),
+                np.array([init.rho]),
+            ]
+        )
+
+    bounds = (
+        [(-3.0, 3.0)] * n_teams        # attack
+        + [(-3.0, 3.0)] * n_teams      # defence
+        + [(-1.0, 1.0)]                # home_advantage
+        + [(-0.4, 0.4)]                # rho — wider risks tau going negative
+    )
+
+    result = minimize(
+        _negative_log_likelihood,
+        x0,
+        args=(home_idx, away_idx, hg, ag, weights, n_teams),
+        method="L-BFGS-B",
+        bounds=bounds,
+    )
+
+    attack_flat = result.x[:n_teams]
+    defence_flat = result.x[n_teams : 2 * n_teams]
+    shift = attack_flat.mean()
+    attack_flat = attack_flat - shift
+    defence_flat = defence_flat - shift
+
+    return DixonColesParams(
+        attack={t: float(attack_flat[i]) for i, t in enumerate(teams)},
+        defence={t: float(defence_flat[i]) for i, t in enumerate(teams)},
+        home_advantage=float(result.x[2 * n_teams]),
+        rho=float(result.x[2 * n_teams + 1]),
+    )
+
+
+def time_decay_weights(
+    match_dates,
+    reference_date,
+    half_life_days: float = 540.0,
+) -> np.ndarray:
+    """Exponential time-decay weights w_t = exp(-ln 2 * age_days / half_life).
+
+    `match_dates` and `reference_date` accept anything numpy can coerce to
+    `datetime64[D]` (ISO strings, datetime, pandas timestamps).
+    """
+    dates = np.asarray(match_dates, dtype="datetime64[D]")
+    ref = np.datetime64(reference_date, "D")
+    days_ago = (ref - dates).astype("timedelta64[D]").astype(float)
+    xi = np.log(2.0) / half_life_days
+    return np.exp(-xi * days_ago)
