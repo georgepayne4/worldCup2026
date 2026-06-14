@@ -107,11 +107,129 @@ def monte_carlo_group(
     }
 
 
-def simulate_tournament(*args, **kwargs):
-    """Full 48-team simulator with knockout bracket. Lands in v1."""
-    raise NotImplementedError
+ROUND_LABELS = (
+    "round_of_32",
+    "round_of_16",
+    "quarter_final",
+    "semi_final",
+    "final",
+    "champion",
+)
 
 
-def simulate_knockout(*args, **kwargs):
-    """Knockout sim with ET and penalties. Lands in v1."""
-    raise NotImplementedError
+def default_group_fixtures(teams: list[str]) -> list[tuple[str, str]]:
+    """Single round-robin: 6 fixtures for 4 teams."""
+    return [(teams[i], teams[j]) for i in range(len(teams)) for j in range(i + 1, len(teams))]
+
+
+def _bracket_seed_order(n: int) -> list[int]:
+    """Standard 1-indexed tournament bracket order (1 vs n, 2 vs n-1, ...) arranged
+    so higher seeds meet later rounds. n must be a power of two."""
+    order = [1]
+    while len(order) < n:
+        size = 2 * len(order)
+        new = []
+        for s in order:
+            new.append(s)
+            new.append(size + 1 - s)
+        order = new
+    return order
+
+
+def simulate_knockout_match(
+    home: str,
+    away: str,
+    sampler: ScoreSampler,
+    rng: np.random.Generator,
+) -> tuple[str, str]:
+    """Return (winner, loser). v0: coin flip on a drawn 90 minutes as a proxy for
+    extra time + penalties. v1 will model both with scaled-down Poisson rates."""
+    hg, ag = sampler(home, away, rng)
+    if hg > ag:
+        return home, away
+    if ag > hg:
+        return away, home
+    return (home, away) if rng.random() < 0.5 else (away, home)
+
+
+def _best_third_placed(
+    group_results: dict[str, list[GroupStanding]], k: int = 8
+) -> list[GroupStanding]:
+    thirds = [standings[2] for standings in group_results.values()]
+    thirds.sort(key=lambda s: (s.points, s.goal_difference, s.goals_for), reverse=True)
+    return thirds[:k]
+
+
+def simulate_world_cup(
+    groups: dict[str, list[str]],
+    sampler: ScoreSampler,
+    rng: np.random.Generator,
+    fixtures_fn: Callable[[list[str]], list[tuple[str, str]]] = default_group_fixtures,
+) -> dict[str, str]:
+    """Run one full 48-team simulation; return team -> furthest round reached.
+
+    Format: 12 groups of 4, top 2 plus the 8 best third-placed teams advance to a
+    32-team knockout.
+
+    v0 simplifications: knockout pairings use a generic 1-vs-32 seeded bracket
+    from overall group-stage performance rather than FIFA's published pairing
+    rules; drawn knockout matches resolve via coin flip.
+    """
+    if len(groups) != 12:
+        raise ValueError(f"expected 12 groups, got {len(groups)}")
+
+    reached: dict[str, str] = {t: "group_stage" for ts in groups.values() for t in ts}
+    group_standings: dict[str, list[GroupStanding]] = {
+        name: simulate_group(teams, fixtures_fn(teams), sampler, rng)
+        for name, teams in groups.items()
+    }
+
+    advancing: list[GroupStanding] = []
+    for standings in group_standings.values():
+        advancing.append(standings[0])
+        advancing.append(standings[1])
+    advancing.extend(_best_third_placed(group_standings, k=8))
+
+    seeded = sorted(
+        advancing,
+        key=lambda s: (s.points, s.goal_difference, s.goals_for),
+        reverse=True,
+    )
+    teams_in_r32 = [s.team for s in seeded]
+    for t in teams_in_r32:
+        reached[t] = "round_of_32"
+
+    order = _bracket_seed_order(len(teams_in_r32))
+    current = [teams_in_r32[s - 1] for s in order]
+
+    for round_name in ROUND_LABELS[1:]:
+        winners = []
+        for i in range(0, len(current), 2):
+            winner, _ = simulate_knockout_match(current[i], current[i + 1], sampler, rng)
+            winners.append(winner)
+        for w in winners:
+            reached[w] = round_name
+        current = winners
+
+    return reached
+
+
+def monte_carlo_world_cup(
+    groups: dict[str, list[str]],
+    sampler: ScoreSampler,
+    n_runs: int = 20_000,
+    seed: int = 42,
+    fixtures_fn: Callable[[list[str]], list[tuple[str, str]]] = default_group_fixtures,
+) -> dict[str, dict[str, float]]:
+    """Run N simulations; return P(furthest round = X) per team."""
+    rng = np.random.default_rng(seed)
+    all_teams = [t for ts in groups.values() for t in ts]
+    labels = ("group_stage", *ROUND_LABELS)
+    counts: dict[str, dict[str, int]] = {t: dict.fromkeys(labels, 0) for t in all_teams}
+    for _ in range(n_runs):
+        for t, r in simulate_world_cup(groups, sampler, rng, fixtures_fn).items():
+            counts[t][r] += 1
+    return {
+        t: {r: c / n_runs for r, c in round_counts.items()}
+        for t, round_counts in counts.items()
+    }

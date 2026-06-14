@@ -25,8 +25,10 @@ from worldcup2026.ratings.elo import (
 )
 from worldcup2026.simulation.tournament import (
     monte_carlo_group,
+    monte_carlo_world_cup,
     sample_score_from_matrix,
     simulate_group,
+    simulate_world_cup,
 )
 
 
@@ -276,6 +278,69 @@ def test_simulate_group_ranks_dominant_team_first():
     standings = simulate_group(teams, fixtures, sampler, np.random.default_rng(0))
     assert standings[0].team == "A"
     assert standings[0].points == 9
+
+
+# --- Full 48-team tournament ---
+
+def _make_groups_48():
+    teams = [f"T{i:02d}" for i in range(48)]
+    return {chr(65 + g): teams[g * 4 : (g + 1) * 4] for g in range(12)}
+
+
+def test_simulate_world_cup_round_counts_invariant():
+    groups = _make_groups_48()
+
+    def sampler(_h, _a, r):
+        return int(r.integers(0, 4)), int(r.integers(0, 4))
+
+    reached = simulate_world_cup(groups, sampler, np.random.default_rng(0))
+    counts = {label: sum(1 for v in reached.values() if v == label) for label in {
+        "group_stage", "round_of_32", "round_of_16",
+        "quarter_final", "semi_final", "final", "champion",
+    }}
+    assert counts == {
+        "group_stage": 16, "round_of_32": 16, "round_of_16": 8,
+        "quarter_final": 4, "semi_final": 2, "final": 1, "champion": 1,
+    }
+
+
+def test_dominant_team_always_wins_the_tournament():
+    groups = _make_groups_48()
+
+    def sampler(home, away, _r):
+        if home == "T00":
+            return 5, 0
+        if away == "T00":
+            return 0, 5
+        return 0, 0
+
+    reached = simulate_world_cup(groups, sampler, np.random.default_rng(7))
+    assert reached["T00"] == "champion"
+
+
+def test_monte_carlo_world_cup_probabilities_sum_to_one_per_team():
+    groups = _make_groups_48()
+
+    def sampler(_h, _a, r):
+        return int(r.integers(0, 3)), int(r.integers(0, 3))
+
+    probs = monte_carlo_world_cup(groups, sampler, n_runs=15, seed=2)
+    for team_probs in probs.values():
+        assert abs(sum(team_probs.values()) - 1.0) < 1e-9
+
+
+def test_monte_carlo_world_cup_dominant_team_wins_every_run():
+    groups = _make_groups_48()
+
+    def sampler(home, away, _r):
+        if home == "T00":
+            return 4, 0
+        if away == "T00":
+            return 0, 4
+        return 0, 0
+
+    probs = monte_carlo_world_cup(groups, sampler, n_runs=10, seed=3)
+    assert probs["T00"]["champion"] == 1.0
 
 
 def test_monte_carlo_group_probabilities_sum_to_one_per_team():
