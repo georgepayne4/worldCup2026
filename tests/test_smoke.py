@@ -15,6 +15,7 @@ from worldcup2026.models.dixon_coles import (
     match_probabilities,
     match_rates,
     over_under_probability,
+    predict_match,
     score_matrix,
     time_decay_weights,
 )
@@ -145,6 +146,20 @@ def test_over_under_partition_on_non_integer_line():
 def test_btts_bounded():
     m = score_matrix(1.5, 1.2, rho=-0.1)
     assert 0.0 < btts_probability(m) < 1.0
+
+
+def test_predict_match_returns_consistent_summary():
+    params = DixonColesParams(
+        attack={"A": 0.3, "B": -0.2}, defence={"A": -0.1, "B": 0.1},
+        home_advantage=0.2, rho=-0.05,
+    )
+    p = predict_match(params, "A", "B")
+    assert p.home_team == "A" and p.away_team == "B"
+    assert abs(p.p_home_win + p.p_draw + p.p_away_win - 1.0) < 1e-9
+    assert abs(p.p_over_2_5 + p.p_under_2_5 - 1.0) < 1e-9
+    assert 0.0 < p.p_btts < 1.0
+    assert p.expected_home_goals > p.expected_away_goals
+    assert p.p_home_win > p.p_away_win
 
 
 # --- Dixon-Coles fit (synthetic round-trip) ---

@@ -97,6 +97,47 @@ def expected_goals(matrix: np.ndarray) -> tuple[float, float]:
     return home_eg, away_eg
 
 
+@dataclass
+class MatchPrediction:
+    home_team: str
+    away_team: str
+    expected_home_goals: float
+    expected_away_goals: float
+    p_home_win: float
+    p_draw: float
+    p_away_win: float
+    p_over_2_5: float
+    p_under_2_5: float
+    p_btts: float
+
+
+def predict_match(
+    params: DixonColesParams,
+    home_team: str,
+    away_team: str,
+    neutral: bool = False,
+    max_goals: int = 10,
+) -> MatchPrediction:
+    """One-call fixture prediction: 1X2, O/U 2.5, BTTS, and expected goals."""
+    lam, mu = match_rates(params, home_team, away_team, neutral=neutral)
+    matrix = score_matrix(lam, mu, params.rho, max_goals=max_goals)
+    p_h, p_d, p_a = match_probabilities(matrix)
+    p_over, p_under = over_under_probability(matrix, line=2.5)
+    eh, ea = expected_goals(matrix)
+    return MatchPrediction(
+        home_team=home_team,
+        away_team=away_team,
+        expected_home_goals=eh,
+        expected_away_goals=ea,
+        p_home_win=p_h,
+        p_draw=p_d,
+        p_away_win=p_a,
+        p_over_2_5=p_over,
+        p_under_2_5=p_under,
+        p_btts=btts_probability(matrix),
+    )
+
+
 def _negative_log_likelihood(
     params_flat: np.ndarray,
     home_idx: np.ndarray,
