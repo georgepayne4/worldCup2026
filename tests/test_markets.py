@@ -7,6 +7,7 @@ import pytest
 from worldcup2026.betting.acca import build_acca, suggest_accas
 from worldcup2026.betting.blend import blend_to_market
 from worldcup2026.betting.markets import (
+    book_multi_prices,
     match_market_table,
     probability,
     rank_same_game_multis,
@@ -79,6 +80,27 @@ def test_same_game_multi_pairs_are_cross_family():
     assert len(pairs) == 16  # 3x2 + 3x2 + 2x2
     for a, b in pairs:
         assert a[0] != b[0]  # legs from different market families
+
+
+def test_book_multi_prices_best_single_book_product():
+    rows = []
+    def add(book, market, selection, line, price):
+        rows.append(dict(home_team="A", away_team="B", bookmaker=book,
+                         market=market, selection=selection, line=line, price=price))
+    # book1: Home 2.0, Under 1.8 -> 3.60 ; book2: Home 2.1, Under 1.7 -> 3.57
+    add("book1", "h2h", "Home", float("nan"), 2.0)
+    add("book1", "totals", "Under", 2.5, 1.8)
+    add("book2", "h2h", "Home", float("nan"), 2.1)
+    add("book2", "totals", "Under", 2.5, 1.7)
+    add("book3", "h2h", "Home", float("nan"), 2.5)  # no totals -> can't form the multi
+    odds = pd.DataFrame(rows)
+    out = book_multi_prices(odds, [(("h2h", "Home"), ("totals", "Under", 2.5))])
+    assert len(out) == 1
+    row = out.iloc[0]
+    assert row["legs"] == "Home + Under 2.5"
+    assert abs(row["sgm_price"] - 3.60) < 1e-9  # best (longest) single-book product
+    assert row["bookmaker"] == "book1"
+    assert row["n_books"] == 2  # book3 lacks a leg
 
 
 def test_rank_same_game_multis_flags_positive_correlation():

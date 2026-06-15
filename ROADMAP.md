@@ -115,15 +115,22 @@ but does **not** fix large per-match disagreements with the market. Conclusion
 holds: don't bet single 1X2 vs sharp books — pursue **blend-to-market marginals
 + correlation edge in same-game multis vs *soft* books**.
 
-**Follow-up (done).** `find_value --odds` now blends each fixture to the
-consensus, so single-1X2 model "edges" vanish (only best-vs-consensus
-line-shopping remains). `find_multis.py` prices same-game multis off the blended
-grids: the model correctly quantifies correlation (e.g. Over 2.5 + BTTS Yes,
-Draw + Under 2.5 are strongly positively correlated). **Caveat:** the headline
-combos are *well-known* correlations that sharp SGM books already adjust for —
-real EV needs (a) actual same-game-multi prices from soft books to compare
-against (the Odds API feed only has h2h/totals), and (b) focus on *less obvious*
-correlations. The engine is right; the remaining work is sourcing SGM prices.
+**Follow-up (done).** `find_value --odds` blends each fixture to the consensus,
+so single-1X2 model "edges" vanish (only best-vs-consensus line-shopping
+remains). `find_multis.py` prices same-game multis off the blended grids and now
+computes **real EV vs the best book's leg-product price**
+(`markets.book_multi_prices` — per-book product of its own h2h+totals leg odds,
+the price a naive-multiplying book gives). `check_multi.py` returns true EV for
+**any real bet-builder quote you paste in**.
+
+**The hard limit (important).** For correlated legs the leg-product is *not* a
+real SGM price — competent bet-builders bake the correlation in, so the headline
+EVs (Draw+Under at 60-100%) are a **screening signal, not bankable edge**. Truly
+bankable EV needs the book's *actual* bet-builder quote (only available by
+scraping each book's widget — no odds API exposes it); `check_multi.py` is built
+to consume exactly that. Realistic edge: less-obvious correlations at soft books
+that genuinely multiply legs. The engine is complete; the missing input is real
+SGM quotes.
 
 ---
 

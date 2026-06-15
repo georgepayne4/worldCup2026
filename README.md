@@ -148,14 +148,22 @@ python scripts/calibrate.py       # fit calibration temperature, verify vs marke
 python scripts/build_accas.py     # high-accuracy 2-3 game accas from the model
 python scripts/find_value.py --demo   # +EV staked bet sheet (synthetic market)
 python scripts/find_value.py --odds data/raw/odds/odds_*.csv   # blends to market
-python scripts/find_multis.py --odds data/raw/odds/odds_*.csv   # correlation edge
+python scripts/find_multis.py --odds data/raw/odds/odds_*.csv  # SGM EV vs book leg-products
+python scripts/check_multi.py --home Germany --away "Ivory Coast" \
+    --legs h2h:Draw,totals:Under:2.5 --price 6.0 --odds data/raw/odds/odds_*.csv
 ```
 
 With `--odds`, `find_value` blends each fixture's marginals to the market
 consensus and prices vs the best available book, so single-1X2 model "edges"
-collapse to line-shopping only. `find_multis` then reads same-game multis off
-those blended grids — the model's correlation vs a book that prices legs
-independently is where the structural edge lives.
+collapse to line-shopping only. `find_multis` prices same-game multis off those
+blended grids against each book's leg-product price (real EV *if the book
+multiplies legs independently*). `check_multi` returns true EV for a real
+bet-builder quote you paste in.
+
+> **Honest limit:** for correlated legs (e.g. Draw + Under) the leg-product is
+> not a real same-game-multi price — competent bet-builders bake the correlation
+> in. So `find_multis`' large EVs are a *screening signal*; bankable EV needs the
+> book's actual bet-builder quote (feed it to `check_multi`).
 
 > **Reality check (Gate G1):** against a 25-book consensus the model has **no
 > tradeable single-1X2 edge** — see `ROADMAP.md`. The model is sound but
