@@ -24,6 +24,7 @@ import os
 from datetime import UTC, datetime
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from worldcup2026.data.loaders import RAW_DIR
@@ -188,6 +189,58 @@ def snapshot(
     df = normalize_odds(raw)
     save_snapshot(df, path)
     return df
+
+
+def normalize_h2h_selections(odds: pd.DataFrame) -> pd.DataFrame:
+    """Map h2h outcome names (team names) to ``Home``/``Away`` (``Draw`` stays)."""
+    out = odds.copy()
+    is_h2h = out["market"] == "h2h"
+    out.loc[is_h2h & (out["selection"] == out["home_team"]), "selection"] = "Home"
+    out.loc[is_h2h & (out["selection"] == out["away_team"]), "selection"] = "Away"
+    return out
+
+
+def consensus_probabilities(odds: pd.DataFrame) -> pd.DataFrame:
+    """Vig-free consensus probability per selection (mean across bookmakers).
+
+    Averages implied probabilities (1/price) across books, then normalises within
+    each ``(home, away, market, line)`` group to strip the margin. Expects h2h
+    selections already normalised (see `normalize_h2h_selections`). This is the
+    market's *opinion* — the blend target for calibrating model marginals.
+    """
+    df = odds.copy()
+    df["line"] = df["line"].fillna(-1.0)
+    df["implied"] = 1.0 / df["price"]
+    grp = df.groupby(["home_team", "away_team", "market", "selection", "line"], as_index=False)
+    cons = grp["implied"].mean()
+    cons["novig"] = cons.groupby(["home_team", "away_team", "market", "line"])["implied"].transform(
+        lambda s: s / s.sum()
+    )
+    cons["line"] = cons["line"].replace(-1.0, np.nan)
+    return cons[["home_team", "away_team", "market", "selection", "line", "novig"]]
+
+
+def market_targets(
+    consensus: pd.DataFrame, home: str, away: str
+) -> tuple[tuple[float, float, float] | None, dict[float, tuple[float, float]] | None]:
+    """Extract a fixture's blend targets from a consensus table.
+
+    Returns ``(h2h, totals)`` where `h2h` is ``(P_home, P_draw, P_away)`` (or None
+    if the 3-way isn't fully present) and `totals` maps each complete line to
+    ``(P_over, P_under)`` (or None).
+    """
+    sub = consensus[(consensus["home_team"] == home) & (consensus["away_team"] == away)]
+    h2h_rows = dict(zip(sub.loc[sub["market"] == "h2h", "selection"],
+                        sub.loc[sub["market"] == "h2h", "novig"], strict=True))
+    h2h = None
+    if {"Home", "Draw", "Away"} <= set(h2h_rows):
+        h2h = (h2h_rows["Home"], h2h_rows["Draw"], h2h_rows["Away"])
+    totals: dict[float, tuple[float, float]] = {}
+    for line, grp in sub[sub["market"] == "totals"].groupby("line"):
+        sels = dict(zip(grp["selection"], grp["novig"], strict=True))
+        if {"Over", "Under"} <= set(sels):
+            totals[float(line)] = (sels["Over"], sels["Under"])
+    return h2h, (totals or None)
 
 
 def best_prices(odds: pd.DataFrame) -> pd.DataFrame:

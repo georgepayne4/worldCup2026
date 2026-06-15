@@ -15,7 +15,10 @@ from worldcup2026.betting.clv import (
 from worldcup2026.data.odds import (
     ODDS_COLUMNS,
     best_prices,
+    consensus_probabilities,
     load_snapshot,
+    market_targets,
+    normalize_h2h_selections,
     normalize_odds,
     save_snapshot,
 )
@@ -89,6 +92,44 @@ def test_best_prices_takes_max_per_selection():
     assert len(best) == 1
     assert best["price"].iloc[0] == 2.3
     assert best["bookmaker"].iloc[0] == "b2"
+
+
+def _two_book_h2h():
+    rows = []
+    for book, prices in [("b1", (2.0, 3.5, 4.0)), ("b2", (2.2, 3.4, 4.2))]:
+        for sel, price in zip(("Brazil", "Draw", "Serbia"), prices, strict=True):
+            rows.append(dict(captured_at="t", event_id="E1", commence_time="t",
+                             home_team="Brazil", away_team="Serbia", bookmaker=book,
+                             market="h2h", selection=sel, line=np.nan, price=price))
+    return pd.DataFrame(rows)
+
+
+def test_normalize_h2h_selections_maps_team_names():
+    out = normalize_h2h_selections(_two_book_h2h())
+    assert set(out["selection"]) == {"Home", "Draw", "Away"}
+
+
+def test_consensus_probabilities_no_vig_and_ordered():
+    cons = consensus_probabilities(normalize_h2h_selections(_two_book_h2h()))
+    assert abs(cons["novig"].sum() - 1.0) < 1e-9  # one market -> sums to 1
+    by_sel = dict(zip(cons["selection"], cons["novig"], strict=True))
+    assert by_sel["Home"] > by_sel["Away"]  # Brazil favoured
+
+
+def test_market_targets_extracts_h2h_and_totals():
+    cons = pd.DataFrame(
+        [
+            ("A", "B", "h2h", "Home", np.nan, 0.5),
+            ("A", "B", "h2h", "Draw", np.nan, 0.3),
+            ("A", "B", "h2h", "Away", np.nan, 0.2),
+            ("A", "B", "totals", "Over", 2.5, 0.55),
+            ("A", "B", "totals", "Under", 2.5, 0.45),
+        ],
+        columns=["home_team", "away_team", "market", "selection", "line", "novig"],
+    )
+    h2h, totals = market_targets(cons, "A", "B")
+    assert h2h == (0.5, 0.3, 0.2)
+    assert totals == {2.5: (0.55, 0.45)}
 
 
 # --- CLV scalar primitives ---

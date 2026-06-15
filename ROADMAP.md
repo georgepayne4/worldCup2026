@@ -115,13 +115,23 @@ but does **not** fix large per-match disagreements with the market. Conclusion
 holds: don't bet single 1X2 vs sharp books — pursue **blend-to-market marginals
 + correlation edge in same-game multis vs *soft* books**.
 
+**Follow-up (done).** `find_value --odds` now blends each fixture to the
+consensus, so single-1X2 model "edges" vanish (only best-vs-consensus
+line-shopping remains). `find_multis.py` prices same-game multis off the blended
+grids: the model correctly quantifies correlation (e.g. Over 2.5 + BTTS Yes,
+Draw + Under 2.5 are strongly positively correlated). **Caveat:** the headline
+combos are *well-known* correlations that sharp SGM books already adjust for —
+real EV needs (a) actual same-game-multi prices from soft books to compare
+against (the Odds API feed only has h2h/totals), and (b) focus on *less obvious*
+correlations. The engine is right; the remaining work is sourcing SGM prices.
+
 ---
 
 ## Post-MVP (sequenced, after G1)
 
 | # | Milestone | Depends on | Why here |
 |---|-----------|-----------|----------|
-| P1 | **Core hardening & uncertainty** — ✅ calibration (temperature + reliability/ECE, `evaluation/calibration.py`, `scripts/calibrate.py`) done; **remaining:** blend-to-market in the value pipeline, Elo→DC seeding with confederation shrinkage, **Bayesian/partial-pooling** strengths so Kelly uses *uncertainty* not point estimates | G1 | Bigger, only worth it once edge is shown; de-risks staking |
+| P1 | **Core hardening & uncertainty** — ✅ calibration (`evaluation/calibration.py`, `scripts/calibrate.py`) and ✅ blend-to-market value pipeline (`find_value --odds` blends marginals to consensus; `scripts/find_multis.py` surfaces correlation edge) done; **remaining:** Elo→DC seeding with confederation shrinkage, **Bayesian/partial-pooling** strengths so Kelly uses *uncertainty* not point estimates | G1 | Bigger, only worth it once edge is shown; de-risks staking |
 | P2 | **Tournament markets** — to-win / reach-stage / group-winner / to-qualify, priced from existing MC outputs | MVP-2 | Cheap (sim already produces these); sharper market, lower edge |
 | P3 | **Player/squad data** — start with the **squad-value covariate** (cheap accuracy win deferred from MVP-3), then minutes/involvement | G2 | Largest external dependency; the gateway to props |
 | P4 | **Player props** — anytime/2+/first scorer, assists, shots, cards, golden boot | P3, MVP-2 | Soft books are weakest here — high edge, high data cost |

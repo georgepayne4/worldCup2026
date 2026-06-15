@@ -160,3 +160,64 @@ def same_game_multi(matrix: np.ndarray, legs: list[_LegSpec]) -> MultiQuote:
     naive = 1.0 / independent if independent > 0 else float("inf")
     ratio = joint / independent if independent > 0 else float("nan")
     return MultiQuote(normalised, joint, independent, fair, naive, ratio)
+
+
+def _leg_label(leg: tuple) -> str:
+    market, selection, line = _normalise_leg(leg)
+    if market == "totals":
+        return f"{selection} {line:.1f}"
+    if market == "btts":
+        return f"BTTS {selection}"
+    return str(selection)
+
+
+def same_game_multi_pairs(total_line: float = 2.5) -> list[tuple]:
+    """Sensible 2-leg same-game combos across different market families.
+
+    Pairs one selection each from {result, total, BTTS} families (never two from
+    the same family, which would be nested or mutually exclusive).
+    """
+    families = [
+        [("h2h", "Home"), ("h2h", "Draw"), ("h2h", "Away")],
+        [("totals", "Over", total_line), ("totals", "Under", total_line)],
+        [("btts", "Yes"), ("btts", "No")],
+    ]
+    pairs: list[tuple] = []
+    for a in range(len(families)):
+        for b in range(a + 1, len(families)):
+            for leg_a in families[a]:
+                for leg_b in families[b]:
+                    pairs.append((leg_a, leg_b))
+    return pairs
+
+
+def rank_same_game_multis(
+    matrix: np.ndarray, pairs: list[tuple] | None = None, *, match_id: str | None = None
+) -> pd.DataFrame:
+    """Price candidate same-game multis and rank by correlation premium.
+
+    On a grid whose marginals are the market's (see ``blend.blend_to_market``),
+    ``corr_ratio = joint / independent`` is the *pure* correlation effect, and
+    ``corr_edge = corr_ratio - 1`` approximates the edge of backing the multi at
+    a book that prices its legs independently (before that book's margin).
+    Positive = the multi is underpriced by an independence-pricing book.
+    """
+    pairs = pairs if pairs is not None else same_game_multi_pairs()
+    rows = []
+    for legs in pairs:
+        q = same_game_multi(matrix, list(legs))
+        rows.append(
+            {
+                "match_id": match_id,
+                "legs": " + ".join(_leg_label(leg) for leg in legs),
+                "joint_prob": q.joint_prob,
+                "independent_prob": q.independent_prob,
+                "corr_ratio": q.correlation_ratio,
+                "corr_edge": q.correlation_ratio - 1.0,
+                "fair_odds": q.fair_odds,
+            }
+        )
+    out = pd.DataFrame(rows)
+    if match_id is None:
+        out = out.drop(columns=["match_id"])
+    return out.sort_values("corr_edge", ascending=False).reset_index(drop=True)

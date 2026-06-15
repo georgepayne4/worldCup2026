@@ -147,8 +147,15 @@ python scripts/clv_demo.py        # CLV/ROI report on a synthetic bet ledger
 python scripts/calibrate.py       # fit calibration temperature, verify vs market
 python scripts/build_accas.py     # high-accuracy 2-3 game accas from the model
 python scripts/find_value.py --demo   # +EV staked bet sheet (synthetic market)
-# python scripts/find_value.py --odds data/raw/odds/odds_*.csv --temperature 0.914
+python scripts/find_value.py --odds data/raw/odds/odds_*.csv   # blends to market
+python scripts/find_multis.py --odds data/raw/odds/odds_*.csv   # correlation edge
 ```
+
+With `--odds`, `find_value` blends each fixture's marginals to the market
+consensus and prices vs the best available book, so single-1X2 model "edges"
+collapse to line-shopping only. `find_multis` then reads same-game multis off
+those blended grids — the model's correlation vs a book that prices legs
+independently is where the structural edge lives.
 
 > **Reality check (Gate G1):** against a 25-book consensus the model has **no
 > tradeable single-1X2 edge** — see `ROADMAP.md`. The model is sound but

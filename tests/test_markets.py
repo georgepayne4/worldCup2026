@@ -9,7 +9,9 @@ from worldcup2026.betting.blend import blend_to_market
 from worldcup2026.betting.markets import (
     match_market_table,
     probability,
+    rank_same_game_multis,
     same_game_multi,
+    same_game_multi_pairs,
     selection_mask,
 )
 from worldcup2026.models.dixon_coles import (
@@ -70,6 +72,22 @@ def test_same_game_multi_general_bounds():
 def test_selection_mask_rejects_unknown():
     with pytest.raises(ValueError):
         selection_mask("h2h", "Nonsense", None, MATRIX.shape[0])
+
+
+def test_same_game_multi_pairs_are_cross_family():
+    pairs = same_game_multi_pairs(2.5)
+    assert len(pairs) == 16  # 3x2 + 3x2 + 2x2
+    for a, b in pairs:
+        assert a[0] != b[0]  # legs from different market families
+
+
+def test_rank_same_game_multis_flags_positive_correlation():
+    table = rank_same_game_multis(MATRIX)
+    assert table["corr_edge"].iloc[0] == (table["corr_ratio"].iloc[0] - 1.0)
+    assert table["corr_edge"].is_monotonic_decreasing  # sorted by edge
+    # Over 2.5 and BTTS Yes both need goals -> positively correlated.
+    row = table[table["legs"] == "Over 2.5 + BTTS Yes"].iloc[0]
+    assert row["corr_ratio"] > 1.0
 
 
 # --- market-blend (IPF) ---
