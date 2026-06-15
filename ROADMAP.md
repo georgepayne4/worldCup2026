@@ -77,23 +77,27 @@ away from the naive product in the right direction; blended marginals match
 supplied market prices to tolerance; acca combines legs with correct
 prob/odds/EV. (`tests/test_markets.py`.)
 
-### MVP-3 — Staking, recommendations + cheap accuracy fixes
+### MVP-3 — Staking, recommendations + cheap accuracy fix  ✅ *done*
 
 **Goal.** Emit a disciplined, staked bet sheet end-to-end.
 
-**Build**
+**Built**
 - `betting/edge.py` — model vs market → EV filter, **fractional** Kelly,
-  per-match/market exposure caps, bankroll + bet log; ranked bet sheet.
-- `scripts/find_value.py` — odds → blend → price → filter → sheet → CLV log.
-- Fold in two cheap, high-impact model fixes:
-  - **strength-weighted shootouts** (replace the coin flip in
-    `simulate_knockout_match`) — fixes every outright/stage price;
-  - **squad-value covariate** (Transfermarkt team value) in the strength fit —
-    the 80/20 of "player quality" without a full player model; fixes thin-history
-    sides (Curaçao, Cape Verde).
+  per-bet / per-match / total exposure caps, bet-sheet summary + CLV log.
+- `scripts/find_value.py` — fit → price remaining fixtures → join market odds
+  (`--odds` snapshot or `--demo`) → +EV bet sheet with stakes.
+- **strength-weighted shootouts** — `simulate_knockout_match` now takes a
+  `shootout_p` (logistic on net strength), wired through the sim/MC and resim;
+  fixes the coin-flip bias in every outright/stage price.
 
-**Acceptance.** Bet sheet lists +EV bets with fair vs offered odds, EV%, Kelly
-stake, exposure within caps; bets logged for CLV; suite + ruff green.
+**Deferred** (moved to Post-MVP P3, needs a data source):
+- **squad-value covariate** (Transfermarkt national-team value) — would be the
+  80/20 of "player quality" for thin-history sides, but requires scraping; it
+  belongs with the player-data milestone, not the no-new-data MVP.
+
+**Done when** (all met): bet sheet lists +EV bets with fair vs offered odds,
+EV%, Kelly stake, exposure within caps; bets logged for CLV; weighted shootouts
+tested; suite + ruff green. (`tests/test_edge.py`, `tests/test_smoke.py`.)
 
 ### Gate G1 — after MVP: *is there measurable edge?*
 Run the MVP forward/back on real prices. If we don't see positive CLV on the
@@ -109,7 +113,7 @@ building.
 |---|-----------|-----------|----------|
 | P1 | **Core hardening & uncertainty** — reliability diagrams/ECE, Elo→DC seeding with confederation shrinkage, **Bayesian/partial-pooling** strengths so Kelly uses *uncertainty* not point estimates | G1 | Bigger, only worth it once edge is shown; de-risks staking |
 | P2 | **Tournament markets** — to-win / reach-stage / group-winner / to-qualify, priced from existing MC outputs | MVP-2 | Cheap (sim already produces these); sharper market, lower edge |
-| P3 | **Player data & minutes/involvement model** | G2 | Largest external dependency; the gateway to props |
+| P3 | **Player/squad data** — start with the **squad-value covariate** (cheap accuracy win deferred from MVP-3), then minutes/involvement | G2 | Largest external dependency; the gateway to props |
 | P4 | **Player props** — anytime/2+/first scorer, assists, shots, cards, golden boot | P3, MVP-2 | Soft books are weakest here — high edge, high data cost |
 | P5 | **In-tournament Bayesian updating** — strengths adapt as matches are played | P1 | The "learning model" (METHODOLOGY §9) |
 | P6 | **Serving, performance & cross-checks** — Streamlit/CLI bet dashboard, polars/joblib MC, optional PyMC fit | most | Make it usable/fast once it's worth using |

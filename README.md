@@ -135,11 +135,18 @@ win on correlation, measure by CLV*). Landed so far:
 - `betting/blend.py` — anchor a match's marginals (1X2/totals) to vig-removed
   market prices while keeping the model's correlation structure (IPF).
 - `betting/acca.py` — build accumulators across different fixtures.
+- `betting/edge.py` — model vs market → EV filter, fractional Kelly, exposure
+  caps, bet-sheet summary and a CLV bet log.
 
 ```bash
-python scripts/clv_demo.py     # CLV/ROI report on a synthetic bet ledger
-python scripts/build_accas.py  # suggest high-accuracy 2-3 game accas from live model
+python scripts/clv_demo.py        # CLV/ROI report on a synthetic bet ledger
+python scripts/build_accas.py     # high-accuracy 2-3 game accas from the model
+python scripts/find_value.py --demo   # +EV staked bet sheet (synthetic market)
+# python scripts/find_value.py --odds data/raw/odds/odds_*.csv   # real prices
 ```
+
+Knockout ties are decided by a strength-weighted penalty shootout (mild logistic
+tilt) rather than a coin flip — see `shootout_p` in `simulation/tournament.py`.
 
 ## Contributing / development notes
 

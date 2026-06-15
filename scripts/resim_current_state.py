@@ -46,6 +46,21 @@ TODAY = date(2026, 6, 14)
 # though World Cup venues are otherwise treated as neutral.
 HOSTS = frozenset({"Mexico", "United States", "Canada"})
 
+# Logistic slope for the penalty-shootout model: shootouts are close to random,
+# so keep the tilt toward the stronger side mild.
+SHOOTOUT_K = 0.35
+
+
+def make_shootout_p(fitted):
+    """P(home wins a shootout) from net strength — a mild logistic tilt."""
+    def net(team: str) -> float:
+        return fitted.attack[team] - fitted.defence[team]
+
+    def shootout_p(home: str, away: str) -> float:
+        return 1.0 / (1.0 + np.exp(-SHOOTOUT_K * (net(home) - net(away))))
+
+    return shootout_p
+
 
 def fit_ratings(since: str, half_life_days: float, max_goals: int):
     """Fit Dixon-Coles on historical results up to TODAY with time decay."""
@@ -197,6 +212,7 @@ def main() -> None:
         fixtures_fn=fixtures_fn,
         et_sampler=et_sampler,
         known_results=known_results,
+        shootout_p=make_shootout_p(fitted),
     )
     cum = cumulative_round_probabilities(probs)
 

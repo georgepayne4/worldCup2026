@@ -51,6 +51,10 @@ ScoreSampler = Callable[[str, str, np.random.Generator], tuple[int, int]]
 # condition a simulation on results so far ("re-sim from current state").
 KnownResults = dict[tuple[str, str], tuple[int, int]]
 
+# P(home wins a penalty shootout) given the two teams. Used to break knockout
+# ties by strength instead of a coin flip.
+ShootoutModel = Callable[[str, str], float]
+
 
 def sample_score_from_matrix(matrix: np.ndarray, rng: np.random.Generator) -> tuple[int, int]:
     """Sample (home_goals, away_goals) from a joint score-matrix distribution."""
@@ -148,14 +152,16 @@ def simulate_knockout_match(
     sampler: ScoreSampler,
     rng: np.random.Generator,
     et_sampler: ScoreSampler | None = None,
+    shootout_p: ShootoutModel | None = None,
 ) -> tuple[str, str]:
     """Return (winner, loser).
 
     If `et_sampler` is supplied it is called once on a drawn 90 minutes —
     typically the same Dixon-Coles rates scaled by ~1/3 for 30 extra-time
-    minutes. If still drawn after ET (or no ET sampler is provided) the tie
-    is broken by an unbiased coin flip — v0 proxy for penalties; v1 will
-    weight by strength.
+    minutes. If still drawn after ET (or no ET sampler is provided) the tie is
+    decided by a penalty shootout: `shootout_p(home, away)` gives P(home wins);
+    absent it, an unbiased coin flip (shootouts are close to random, with only a
+    mild edge to the stronger side).
     """
     hg, ag = sampler(home, away, rng)
     if hg > ag:
@@ -168,7 +174,8 @@ def simulate_knockout_match(
             return home, away
         if et_ag > et_hg:
             return away, home
-    return (home, away) if rng.random() < 0.5 else (away, home)
+    p_home = 0.5 if shootout_p is None else shootout_p(home, away)
+    return (home, away) if rng.random() < p_home else (away, home)
 
 
 def _qualifying_thirds(group_standings: dict[str, list[GroupStanding]]) -> list[str]:
@@ -192,6 +199,7 @@ def simulate_world_cup(
     fixtures_fn: Callable[[list[str]], list[tuple[str, str]]] = default_group_fixtures,
     et_sampler: ScoreSampler | None = None,
     known_results: KnownResults | None = None,
+    shootout_p: ShootoutModel | None = None,
 ) -> dict[str, str]:
     """Run one full 48-team simulation; return team -> furthest round reached.
 
@@ -200,10 +208,8 @@ def simulate_world_cup(
     (`simulation.bracket`): group winners/runners-up occupy their published R32
     slots and the third-placed teams are routed under Annex C's constraints.
     `known_results` fixes already-played group fixtures (see `simulate_group`)
-    so the run reflects the tournament's current state.
-
-    v0 simplifications that remain: drawn knockout matches resolve via coin flip
-    (unless an `et_sampler` breaks them first).
+    so the run reflects the tournament's current state. `shootout_p` decides
+    drawn knockout ties by strength (else a coin flip).
     """
     if set(groups) != set(GROUP_LETTERS):
         raise ValueError(
@@ -230,7 +236,8 @@ def simulate_world_cup(
         winners = []
         for i in range(0, len(current), 2):
             winner, _ = simulate_knockout_match(
-                current[i], current[i + 1], sampler, rng, et_sampler=et_sampler
+                current[i], current[i + 1], sampler, rng,
+                et_sampler=et_sampler, shootout_p=shootout_p,
             )
             winners.append(winner)
         for w in winners:
@@ -267,11 +274,13 @@ def monte_carlo_world_cup(
     fixtures_fn: Callable[[list[str]], list[tuple[str, str]]] = default_group_fixtures,
     et_sampler: ScoreSampler | None = None,
     known_results: KnownResults | None = None,
+    shootout_p: ShootoutModel | None = None,
 ) -> dict[str, dict[str, float]]:
     """Run N simulations; return P(furthest round = X) per team.
 
     `known_results` conditions every run on the same already-played fixtures —
-    the basis for "re-sim from current state".
+    the basis for "re-sim from current state". `shootout_p` decides drawn
+    knockout ties by strength.
     """
     rng = np.random.default_rng(seed)
     all_teams = [t for ts in groups.values() for t in ts]
@@ -280,7 +289,7 @@ def monte_carlo_world_cup(
     for _ in range(n_runs):
         for t, r in simulate_world_cup(
             groups, sampler, rng, fixtures_fn, et_sampler=et_sampler,
-            known_results=known_results,
+            known_results=known_results, shootout_p=shootout_p,
         ).items():
             counts[t][r] += 1
     return {

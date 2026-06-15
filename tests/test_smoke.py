@@ -587,6 +587,18 @@ def test_et_drawn_falls_through_to_coin_flip():
     assert {winner, loser} == {"A", "B"}
 
 
+def test_shootout_p_decides_drawn_tie_by_strength():
+    def drawn(_h, _a, _r):
+        return 0, 0
+
+    rng = np.random.default_rng(0)
+    # p_home = 1.0 -> the home side always wins the shootout; 0.0 -> away always.
+    w, lose = simulate_knockout_match("A", "B", drawn, rng, shootout_p=lambda h, a: 1.0)
+    assert w == "A" and lose == "B"
+    w, lose = simulate_knockout_match("A", "B", drawn, rng, shootout_p=lambda h, a: 0.0)
+    assert w == "B" and lose == "A"
+
+
 def test_monte_carlo_world_cup_dominant_team_wins_every_run():
     groups = _make_groups_48()
 
