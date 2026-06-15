@@ -18,6 +18,7 @@ from __future__ import annotations
 import numpy as np
 
 from worldcup2026.betting.markets import selection_mask
+from worldcup2026.models.dixon_coles import match_probabilities
 
 # A partition is a list of (mask, target_prob) whose masks tile the grid and
 # whose targets sum to 1.
@@ -93,3 +94,19 @@ def blend_to_market(
     if not partitions:
         return matrix.astype(float).copy()
     return blend_grid(matrix, partitions, iters=iters, tol=tol)
+
+
+def sharpen_1x2(matrix: np.ndarray, temperature: float) -> np.ndarray:
+    """Apply a calibration `temperature` to a match's 1X2 marginal.
+
+    Sharpens (``temperature`` < 1) or softens the home/draw/away marginal by
+    power scaling, then reblends the grid to it — so the correction propagates
+    coherently to every derived market while keeping the correct-score shape
+    within each result region. ``temperature == 1`` is a no-op.
+    """
+    if temperature == 1.0:
+        return matrix.astype(float).copy()
+    p = np.array(match_probabilities(matrix), dtype=float)
+    scaled = p ** (1.0 / temperature)
+    scaled /= scaled.sum()
+    return blend_to_market(matrix, h2h=tuple(scaled))

@@ -31,3 +31,8 @@ world_cup:
   # neutral venues. 0 disables. ~0.15 ≈ a ~16% scoring lift in their matches.
   host_advantage: 0.15
   hosts: ["Mexico", "United States", "Canada"]
+  # Calibration temperature fit on out-of-sample outcomes (scripts/calibrate.py).
+  # <1 sharpens the under-confident model. Pass via --temperature; mild (0.914)
+  # because the holdout is easier than WC matches — it halves the average bias vs
+  # market but does NOT fix per-match disagreement, so single-1X2 is not bettable.
+  calibration_temperature: 0.914

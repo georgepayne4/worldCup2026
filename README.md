@@ -138,12 +138,22 @@ win on correlation, measure by CLV*). Landed so far:
 - `betting/edge.py` — model vs market → EV filter, fractional Kelly, exposure
   caps, bet-sheet summary and a CLV bet log.
 
+- `evaluation/calibration.py` — temperature scaling + reliability/ECE. The
+  model is under-confident; `scripts/calibrate.py` fits the correction and
+  re-verifies it against the market. Pass `--temperature` to the scripts below.
+
 ```bash
 python scripts/clv_demo.py        # CLV/ROI report on a synthetic bet ledger
+python scripts/calibrate.py       # fit calibration temperature, verify vs market
 python scripts/build_accas.py     # high-accuracy 2-3 game accas from the model
 python scripts/find_value.py --demo   # +EV staked bet sheet (synthetic market)
-# python scripts/find_value.py --odds data/raw/odds/odds_*.csv   # real prices
+# python scripts/find_value.py --odds data/raw/odds/odds_*.csv --temperature 0.914
 ```
+
+> **Reality check (Gate G1):** against a 25-book consensus the model has **no
+> tradeable single-1X2 edge** — see `ROADMAP.md`. The model is sound but
+> under-confident; the live edge has to come from correlation in same-game
+> multis vs *soft* books, not from out-predicting sharp 1X2 lines.
 
 Knockout ties are decided by a strength-weighted penalty shootout (mild logistic
 tilt) rather than a coin flip — see `shootout_p` in `simulation/tournament.py`.

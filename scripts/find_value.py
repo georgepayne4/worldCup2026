@@ -21,6 +21,7 @@ import argparse
 import numpy as np
 import pandas as pd
 
+from worldcup2026.betting.blend import sharpen_1x2
 from worldcup2026.betting.edge import (
     StakingConfig,
     bet_sheet_summary,
@@ -40,8 +41,13 @@ HOST_ADVANTAGE = 0.15
 BET_MARKETS = ("h2h", "totals", "btts")
 
 
-def model_candidates(fitted, fixtures, max_goals: int) -> pd.DataFrame:
-    """Model probabilities for every remaining fixture's bettable selections."""
+def model_candidates(fitted, fixtures, max_goals: int, temperature: float = 1.0) -> pd.DataFrame:
+    """Model probabilities for every remaining fixture's bettable selections.
+
+    `temperature` (<1) applies the calibration from ``scripts/calibrate.py`` to
+    each match's 1X2 marginal before deriving markets — fixing the model's
+    under-confidence so single-bet "edges" reflect real value, not miscalibration.
+    """
     tables = []
     for fx in fixtures[~fixtures["played"]].itertuples(index=False):
         if fx.home not in fitted.attack or fx.away not in fitted.attack:
@@ -49,7 +55,7 @@ def model_candidates(fitted, fixtures, max_goals: int) -> pd.DataFrame:
         hb = HOST_ADVANTAGE if fx.home in HOSTS else 0.0
         ab = HOST_ADVANTAGE if fx.away in HOSTS else 0.0
         lam, mu = match_rates(fitted, fx.home, fx.away, neutral=True, home_boost=hb, away_boost=ab)
-        matrix = score_matrix(lam, mu, fitted.rho, max_goals)
+        matrix = sharpen_1x2(score_matrix(lam, mu, fitted.rho, max_goals), temperature)
         tables.append(
             match_market_table(
                 matrix, match_id=f"{fx.home} v {fx.away}",
@@ -115,6 +121,12 @@ def main() -> None:
     ap.add_argument("--kelly", type=float, default=0.25, help="fractional-Kelly multiplier")
     ap.add_argument("--min-ev", type=float, default=0.03)
     ap.add_argument("--max-goals", type=int, default=8)
+    ap.add_argument(
+        "--temperature",
+        type=float,
+        default=1.0,
+        help="calibration temperature from scripts/calibrate.py (<1 sharpens)",
+    )
     ap.add_argument("--top", type=int, default=20)
     ap.add_argument("--log", help="append the bet sheet to this CSV")
     args = ap.parse_args()
@@ -124,7 +136,9 @@ def main() -> None:
     fitted = fit_window(results, TODAY, 10.0, 1095.0)
     fixtures = load_fixtures_2026()
 
-    candidates = model_candidates(fitted, fixtures, args.max_goals)
+    if args.temperature != 1.0:
+        print(f"Applying calibration temperature {args.temperature:.3f}.")
+    candidates = model_candidates(fitted, fixtures, args.max_goals, args.temperature)
     if args.demo:
         print("Using SYNTHETIC market (demo) - not real prices.")
         candidates = synth_market(candidates, seed=1)

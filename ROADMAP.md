@@ -105,13 +105,23 @@ correlated markets, **stop staking** and return to core hardening (Post-MVP P1)
 before risking money. This gate decides whether the rest of the roadmap is worth
 building.
 
+**Result (June 2026, real Odds API snapshot).** Model 1X2 correlates 0.96 with a
+25-book consensus (MAE 5pts) but is **under-confident** — it shaves favourites
+(~−4.5pts) and inflates underdogs (~+2.2pts), so single-bet "value" is
+concentrated on longshots and is *miscalibration, not edge*. Verdict: **no
+tradeable single-1X2 edge; do not stake the raw sheet.** P1 calibration
+(temperature 0.914) halves the average bias and improves holdout log-loss/ECE,
+but does **not** fix large per-match disagreements with the market. Conclusion
+holds: don't bet single 1X2 vs sharp books — pursue **blend-to-market marginals
++ correlation edge in same-game multis vs *soft* books**.
+
 ---
 
 ## Post-MVP (sequenced, after G1)
 
 | # | Milestone | Depends on | Why here |
 |---|-----------|-----------|----------|
-| P1 | **Core hardening & uncertainty** — reliability diagrams/ECE, Elo→DC seeding with confederation shrinkage, **Bayesian/partial-pooling** strengths so Kelly uses *uncertainty* not point estimates | G1 | Bigger, only worth it once edge is shown; de-risks staking |
+| P1 | **Core hardening & uncertainty** — ✅ calibration (temperature + reliability/ECE, `evaluation/calibration.py`, `scripts/calibrate.py`) done; **remaining:** blend-to-market in the value pipeline, Elo→DC seeding with confederation shrinkage, **Bayesian/partial-pooling** strengths so Kelly uses *uncertainty* not point estimates | G1 | Bigger, only worth it once edge is shown; de-risks staking |
 | P2 | **Tournament markets** — to-win / reach-stage / group-winner / to-qualify, priced from existing MC outputs | MVP-2 | Cheap (sim already produces these); sharper market, lower edge |
 | P3 | **Player/squad data** — start with the **squad-value covariate** (cheap accuracy win deferred from MVP-3), then minutes/involvement | G2 | Largest external dependency; the gateway to props |
 | P4 | **Player props** — anytime/2+/first scorer, assists, shots, cards, golden boot | P3, MVP-2 | Soft books are weakest here — high edge, high data cost |

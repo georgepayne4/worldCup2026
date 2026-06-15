@@ -18,6 +18,7 @@ import argparse
 import pandas as pd
 
 from worldcup2026.betting.acca import suggest_accas
+from worldcup2026.betting.blend import sharpen_1x2
 from worldcup2026.betting.markets import match_market_table
 from worldcup2026.data.loaders import (
     load_fixtures_2026,
@@ -50,7 +51,7 @@ def describe(row: pd.Series) -> str:
     return f"{market} {sel}"
 
 
-def candidate_legs(fitted, fixtures, max_goals: int) -> pd.DataFrame:
+def candidate_legs(fitted, fixtures, max_goals: int, temperature: float = 1.0) -> pd.DataFrame:
     """Model market table for every remaining fixture, stacked."""
     remaining = fixtures[~fixtures["played"]]
     tables = []
@@ -63,7 +64,7 @@ def candidate_legs(fitted, fixtures, max_goals: int) -> pd.DataFrame:
             fitted, fx.home, fx.away, neutral=True,
             home_boost=home_boost, away_boost=away_boost,
         )
-        matrix = score_matrix(lam, mu, fitted.rho, max_goals)
+        matrix = sharpen_1x2(score_matrix(lam, mu, fitted.rho, max_goals), temperature)
         tables.append(
             match_market_table(
                 matrix, match_id=f"{fx.home} v {fx.away}",
@@ -87,6 +88,7 @@ def main() -> None:
     ap.add_argument("--window-years", type=float, default=10.0)
     ap.add_argument("--half-life", type=float, default=1095.0)
     ap.add_argument("--max-goals", type=int, default=8)
+    ap.add_argument("--temperature", type=float, default=1.0, help="calibration (see scripts/calibrate.py)")
     args = ap.parse_args()
 
     print(f"Fitting model (window {args.window_years:.0f}y, half-life {args.half_life:.0f}d)...")
@@ -97,7 +99,7 @@ def main() -> None:
     n_remaining = int((~fixtures["played"]).sum())
     print(f"Pricing {n_remaining} remaining fixtures and building accas...\n")
 
-    candidates = candidate_legs(fitted, fixtures, args.max_goals)
+    candidates = candidate_legs(fitted, fixtures, args.max_goals, args.temperature)
     accas = suggest_accas(
         candidates,
         n_accas=args.accas,
