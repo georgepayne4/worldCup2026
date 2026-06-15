@@ -125,12 +125,18 @@ the price a naive-multiplying book gives). `check_multi.py` returns true EV for
 
 **The hard limit (important).** For correlated legs the leg-product is *not* a
 real SGM price — competent bet-builders bake the correlation in, so the headline
-EVs (Draw+Under at 60-100%) are a **screening signal, not bankable edge**. Truly
-bankable EV needs the book's *actual* bet-builder quote (only available by
-scraping each book's widget — no odds API exposes it); `check_multi.py` is built
-to consume exactly that. Realistic edge: less-obvious correlations at soft books
-that genuinely multiply legs. The engine is complete; the missing input is real
-SGM quotes.
+EVs (Draw+Under at 60-100%) are a **screening signal, not bankable edge**.
+
+**Resolution — Betfair Correct Score as the market joint.** Rather than scrape
+bet-builder widgets, the Betfair Exchange **Correct Score** market *is* the
+market's joint score distribution. `data/betfair.py` (official API, credential-
+gated) + `betting/correct_score.py` turn it into a score grid, and
+`check_multi.py --correct-score` prices any combo straight off it (model-free,
+sharp) and computes real EV vs a sportsbook quote. This is the sanctioned, no-
+scraping source of true correlated-market prices. Live HTTP is unverified
+pending Betfair credentials (`BETFAIR_APP_KEY` + session); the grid + parser are
+tested. **Remaining:** add Betfair creds to fetch live Correct Score, and the
+sportsbook quote to compare (read off the bet-builder UI, or a future scraper).
 
 ---
 

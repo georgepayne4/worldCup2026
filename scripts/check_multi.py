@@ -18,8 +18,10 @@ Run:
 from __future__ import annotations
 
 import argparse
+import json
 
 from worldcup2026.betting.blend import blend_to_market, sharpen_1x2
+from worldcup2026.betting.correct_score import grid_from_prices
 from worldcup2026.betting.markets import same_game_multi
 from worldcup2026.data.loaders import load_international_results
 from worldcup2026.data.odds import (
@@ -57,33 +59,44 @@ def main() -> None:
     ap.add_argument("--legs", required=True, help="comma-separated market:selection[:line]")
     ap.add_argument("--price", type=float, required=True, help="offered decimal odds for the multi")
     ap.add_argument("--odds", help="snapshot to blend marginals to market (recommended)")
+    ap.add_argument(
+        "--correct-score",
+        help="JSON {scoreline: decimal_odds} (e.g. Betfair Correct Score) used as "
+        "the TRUE joint — model-free, the sharpest source for correlated combos",
+    )
     ap.add_argument("--temperature", type=float, default=0.914, help="used if no --odds")
     ap.add_argument("--max-goals", type=int, default=8)
     args = ap.parse_args()
 
-    results = load_international_results()
-    fitted = fit_window(results, TODAY, 10.0, 1095.0)
-    for team in (args.home, args.away):
-        if team not in fitted.attack:
-            raise SystemExit(f"no rating for {team!r} — check spelling against the dataset")
-
-    hb = HOST_ADVANTAGE if args.home in HOSTS else 0.0
-    ab = HOST_ADVANTAGE if args.away in HOSTS else 0.0
-    lam, mu = match_rates(fitted, args.home, args.away, neutral=True, home_boost=hb, away_boost=ab)
-    grid = score_matrix(lam, mu, fitted.rho, args.max_goals)
-
-    if args.odds:
-        consensus = consensus_probabilities(
-            normalize_h2h_selections(apply_team_aliases(load_snapshot(args.odds)))
-        )
-        h2h, totals = market_targets(consensus, args.home, args.away)
-        if h2h is None:
-            print("(no market marginals for this fixture; using model + temperature)")
-            grid = sharpen_1x2(grid, args.temperature)
-        else:
-            grid = blend_to_market(grid, h2h=h2h, totals=totals)
+    source = "model"
+    if args.correct_score:
+        with open(args.correct_score) as fh:
+            prices = json.load(fh)
+        grid = grid_from_prices(prices, max_goals=args.max_goals)
+        source = "Betfair Correct Score (market joint, model-free)"
     else:
-        grid = sharpen_1x2(grid, args.temperature)
+        results = load_international_results()
+        fitted = fit_window(results, TODAY, 10.0, 1095.0)
+        for team in (args.home, args.away):
+            if team not in fitted.attack:
+                raise SystemExit(f"no rating for {team!r} — check spelling against the dataset")
+        hb = HOST_ADVANTAGE if args.home in HOSTS else 0.0
+        ab = HOST_ADVANTAGE if args.away in HOSTS else 0.0
+        lam, mu = match_rates(fitted, args.home, args.away, neutral=True, home_boost=hb, away_boost=ab)
+        grid = score_matrix(lam, mu, fitted.rho, args.max_goals)
+        if args.odds:
+            consensus = consensus_probabilities(
+                normalize_h2h_selections(apply_team_aliases(load_snapshot(args.odds)))
+            )
+            h2h, totals = market_targets(consensus, args.home, args.away)
+            if h2h is None:
+                print("(no market marginals for this fixture; using model + temperature)")
+                grid = sharpen_1x2(grid, args.temperature)
+            else:
+                grid = blend_to_market(grid, h2h=h2h, totals=totals)
+                source = "model correlation + market marginals"
+        else:
+            grid = sharpen_1x2(grid, args.temperature)
 
     legs = parse_legs(args.legs)
     q = same_game_multi(grid, legs)
@@ -92,7 +105,8 @@ def main() -> None:
 
     leg_str = " + ".join(f"{m}:{s}" + (f":{ln}" if ln else "") for m, s, ln in legs)
     print(f"\n{args.home} v {args.away} | {leg_str}")
-    print(f"  model true joint prob : {q.joint_prob:.1%}  (fair odds {q.fair_odds:.2f})")
+    print(f"  joint source          : {source}")
+    print(f"  true joint prob       : {q.joint_prob:.1%}  (fair odds {q.fair_odds:.2f})")
     print(f"  naive-independent     : {q.independent_prob:.1%}  (odds {q.naive_odds:.2f}) - what a multiplying book gives")
     print(f"  correlation ratio     : {q.correlation_ratio:.2f}x")
     print(f"  offered price         : {args.price:.2f}  (book-implied {book_implied:.1%})")

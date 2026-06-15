@@ -162,8 +162,21 @@ bet-builder quote you paste in.
 
 > **Honest limit:** for correlated legs (e.g. Draw + Under) the leg-product is
 > not a real same-game-multi price — competent bet-builders bake the correlation
-> in. So `find_multis`' large EVs are a *screening signal*; bankable EV needs the
-> book's actual bet-builder quote (feed it to `check_multi`).
+> in. So `find_multis`' large EVs are a *screening signal*.
+
+**Betfair Correct Score = the market's joint distribution.** The cleanest source
+of true correlated-market prices isn't scraping bet-builders — it's the Betfair
+Exchange **Correct Score** market (`data/betfair.py`, official API). It *is* the
+joint, so any combo prices straight off it, model-free:
+
+```bash
+# with a cached/exported Correct Score price map {"2 - 1": 9.0, ...}:
+python scripts/check_multi.py --home "Team A" --away "Team B" \
+    --legs h2h:Draw,totals:Under:2.5 --price 5.5 --correct-score cs_prices.json
+```
+
+Live fetching needs `BETFAIR_APP_KEY` (+ session token / login) in `.env`; the
+grid/parser logic is unit-tested and runs offline from a cached price map.
 
 > **Reality check (Gate G1):** against a 25-book consensus the model has **no
 > tradeable single-1X2 edge** — see `ROADMAP.md`. The model is sound but
