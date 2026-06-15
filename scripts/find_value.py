@@ -29,7 +29,7 @@ from worldcup2026.betting.edge import (
 )
 from worldcup2026.betting.markets import match_market_table
 from worldcup2026.data.loaders import load_fixtures_2026, load_international_results
-from worldcup2026.data.odds import best_prices, load_snapshot
+from worldcup2026.data.odds import apply_team_aliases, best_prices, load_snapshot
 from worldcup2026.evaluation.backtest import fit_window
 from worldcup2026.models.dixon_coles import match_rates, score_matrix
 
@@ -90,12 +90,18 @@ def _remap_h2h(odds: pd.DataFrame) -> pd.DataFrame:
 
 def join_market(candidates: pd.DataFrame, odds_path: str) -> pd.DataFrame:
     """Join real snapshot odds (best price per selection) onto model candidates."""
-    odds = _remap_h2h(best_prices(load_snapshot(odds_path)))
+    odds = _remap_h2h(apply_team_aliases(best_prices(load_snapshot(odds_path))))
     keys = ["home_team", "away_team", "market", "selection", "line"]
-    merged = candidates.merge(
+    cand = candidates.copy()
+    # h2h/btts have no line; use a sentinel so NaN keys join cleanly (and dtypes match).
+    cand["line"] = pd.to_numeric(cand["line"], errors="coerce").fillna(-1.0)
+    odds = odds.copy()
+    odds["line"] = pd.to_numeric(odds["line"], errors="coerce").fillna(-1.0)
+    merged = cand.merge(
         odds[[*keys, "price"]].rename(columns={"price": "market_odds"}),
         on=keys, how="inner",
     )
+    merged["line"] = merged["line"].replace(-1.0, np.nan)
     print(f"  matched {len(merged)} of {len(candidates)} model selections to odds")
     return merged
 

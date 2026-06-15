@@ -47,6 +47,27 @@ ODDS_COLUMNS = [
 WORLD_CUP_SPORT = "soccer_fifa_world_cup"
 _ODDS_API_BASE = "https://api.the-odds-api.com/v4"
 
+# Provider team spellings -> the dataset's (martj42) canonical names. Keep this
+# the single place the two naming worlds are reconciled.
+WC_TEAM_ALIASES = {
+    "USA": "United States",
+    "Bosnia & Herzegovina": "Bosnia and Herzegovina",
+}
+
+
+def apply_team_aliases(odds: pd.DataFrame, aliases: dict[str, str] | None = None) -> pd.DataFrame:
+    """Canonicalise provider team names so odds join to dataset fixtures.
+
+    Rewrites `home_team`, `away_team` and (team-name) `selection` values. Totals
+    selections (``Over``/``Under``) are untouched.
+    """
+    aliases = WC_TEAM_ALIASES if aliases is None else aliases
+    out = odds.copy()
+    for col in ("home_team", "away_team", "selection"):
+        if col in out.columns:
+            out[col] = out[col].replace(aliases)
+    return out
+
 
 class OddsAPIError(RuntimeError):
     """Raised when the odds provider cannot be reached or is misconfigured."""
@@ -63,9 +84,17 @@ def fetch_odds(
 ) -> list[dict]:
     """Fetch raw event odds from The Odds API. Returns the parsed JSON list.
 
-    `api_key` falls back to the ``ODDS_API_KEY`` environment variable. Network
-    access and a valid key are required; for offline work use `load_snapshot`.
+    `api_key` falls back to the ``ODDS_API_KEY`` environment variable (loaded
+    from ``.env`` if present). Network access and a valid key are required; for
+    offline work use `load_snapshot`.
     """
+    if api_key is None and not os.environ.get("ODDS_API_KEY"):
+        try:
+            from dotenv import load_dotenv
+
+            load_dotenv(RAW_DIR.parents[1] / ".env")  # repo-root .env
+        except ModuleNotFoundError:  # pragma: no cover - dotenv is a dep
+            pass
     key = api_key or os.environ.get("ODDS_API_KEY")
     if not key:
         raise OddsAPIError(
