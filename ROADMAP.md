@@ -40,7 +40,7 @@ operation *can* win.
 
 ## MVP — prove or kill the edge (3 milestones)
 
-### MVP-1 — Market data + CLV measurement  ← *in progress*
+### MVP-1 — Market data + CLV measurement  ✅ *done*
 
 **Goal.** Be able to *measure* edge. Without prices and a CLV harness, nothing
 else is verifiable.
@@ -57,23 +57,25 @@ else is verifiable.
 **Acceptance.** CLV math unit-tested; demo prints a CLV/ROI report end-to-end;
 odds loader round-trips a snapshot; suite + ruff green.
 
-### MVP-2 — Edge engine (market-blend + correlated markets)
+### MVP-2 — Edge engine (market-blend + correlated markets)  ✅ *done*
 
 **Goal.** Produce prices where we have structural edge.
 
-**Build**
-- `betting/blend.py` — pull the joint `score_matrix`'s 1X2/totals toward
-  vig-removed market marginals (e.g. minimise divergence subject to the grid),
-  yielding a market-anchored joint distribution per match.
-- `betting/markets.py` — read O/U (all lines), BTTS, team totals, Asian
-  handicaps, correct score, double chance from the (blended) joint.
-- **Same-game multi pricing** — combine within-match legs via the joint grid
-  (not the naive product); expose the correlation premium/discount vs a book
-  that multiplies legs.
+**Built**
+- `betting/blend.py` — IPF (Sinkhorn) blend of the joint `score_matrix`'s 1X2
+  and/or totals marginals toward vig-removed market prices, preserving the
+  model's correlation structure.
+- `betting/markets.py` — 1X2, double chance, totals (any line), BTTS read off
+  the (blended) joint, plus **same-game multi pricing** that exposes the
+  correlation premium vs a leg-multiplying book.
+- `betting/acca.py` + `scripts/build_accas.py` — cross-game accumulator builder
+  (independent legs, one per match; accuracy/value modes) that suggests
+  placeable 2–3 game accas from the most confident model selections.
 
-**Acceptance.** Markets partition correctly (tested); a correlated 2–3 leg multi
-prices away from the naive product in the right direction (tested); blended
-marginals match supplied market prices within tolerance.
+**Done when** (all met): markets partition correctly; a correlated multi prices
+away from the naive product in the right direction; blended marginals match
+supplied market prices to tolerance; acca combines legs with correct
+prob/odds/EV. (`tests/test_markets.py`.)
 
 ### MVP-3 — Staking, recommendations + cheap accuracy fixes
 

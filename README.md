@@ -129,9 +129,16 @@ win on correlation, measure by CLV*). Landed so far:
 - `betting/clv.py` — closing-line-value & P&L harness: CLV-EV vs the no-vig
   close, beat-close rate, settlement, and an aggregate report. CLV is the
   go/no-go signal for whether the model has real edge.
+- `betting/markets.py` — 1X2, double chance, totals, BTTS and **same-game
+  multis** read off the joint score matrix (true correlation, not naive
+  leg-multiplication).
+- `betting/blend.py` — anchor a match's marginals (1X2/totals) to vig-removed
+  market prices while keeping the model's correlation structure (IPF).
+- `betting/acca.py` — build accumulators across different fixtures.
 
 ```bash
 python scripts/clv_demo.py     # CLV/ROI report on a synthetic bet ledger
+python scripts/build_accas.py  # suggest high-accuracy 2-3 game accas from live model
 ```
 
 ## Contributing / development notes
